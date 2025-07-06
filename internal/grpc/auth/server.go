@@ -38,7 +38,7 @@ type Auth interface {
 		ctx context.Context,
 		token string,
 	) (userID int64, isValid bool, err error)
-	GetUserInfo(
+	UserInfo(
 		ctx context.Context,
 		userID int64,
 	) (email, steamURL, pathToPhoto string, err error)
@@ -152,7 +152,7 @@ func (s *serverAPI) GetUserInfo(
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	email, steamURL, pathToPhoto, err := s.auth.GetUserInfo(ctx, userID)
+	email, steamURL, pathToPhoto, err := s.auth.UserInfo(ctx, userID)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
 			return nil, status.Error(codes.NotFound, "user not found")

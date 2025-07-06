@@ -222,11 +222,11 @@ func (a *Auth) ValidateToken(ctx context.Context, tokenStr string) (userID int64
 	return int64(uidFloat), true, nil
 }
 
-func (a *Auth) GetUserInfo(
+func (a *Auth) UserInfo(
 	ctx context.Context,
 	userID int64,
 ) (email, steamURL, pathToPhoto string, err error) {
-	const op = "auth.GetUserInfo"
+	const op = "auth.UserInfo"
 	log := a.log.With(
 		slog.String("op", op),
 		slog.Int64("user_id", userID),
