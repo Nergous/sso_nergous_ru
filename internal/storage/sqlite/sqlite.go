@@ -19,7 +19,7 @@ type Storage struct {
 func New(storagePath string) (*Storage, error) {
 	const op = "storage.sqlite.New"
 
-	db, err := sql.Open("sqlite3", storagePath)
+	db, err := sql.Open("sqlite3", storagePath+"?_journal_mode=WAL&mode=rwc")
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -81,7 +81,7 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 }
 
 func (s *Storage) UserByID(ctx context.Context, id int64) (models.User, error) {
-	const op = "storage.sqlite.User"
+	const op = "storage.sqlite.UserByID"
 
 	stmt, err := s.db.Prepare("SELECT * FROM users WHERE id = ?;")
 	if err != nil {
@@ -92,7 +92,7 @@ func (s *Storage) UserByID(ctx context.Context, id int64) (models.User, error) {
 	row := stmt.QueryRowContext(ctx, id)
 
 	var user models.User
-	err = row.Scan(&user.ID, &user.Email, &user.PassHash, &user.SteamURL, &user.PathToPhoto)
+	err = row.Scan(&user.ID, &user.Email, &user.PassHash, &user.SteamURL, &user.PathToPhoto, &user.IsAdmin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.User{}, fmt.Errorf("%s: %w", op, storage.ErrUserNotFound)

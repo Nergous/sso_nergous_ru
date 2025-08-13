@@ -142,7 +142,7 @@ func (s *serverAPI) ValidateToken(
 	return &ssov1.ValidateTokenResponse{UserId: userID, Valid: isValid}, nil
 }
 
-func (s *serverAPI) GetUserInfo(
+func (s *serverAPI) UserInfo(
 	ctx context.Context,
 	req *ssov1.UserInfoRequest,
 ) (*ssov1.UserInfoResponse, error) {
