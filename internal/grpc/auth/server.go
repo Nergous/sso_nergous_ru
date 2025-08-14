@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"sso/internal/domain/models"
 	"sso/internal/services/auth"
 
 	ssov1 "github.com/Nergous/sso_protos/gen/go/sso"
@@ -42,6 +43,9 @@ type Auth interface {
 		ctx context.Context,
 		userID int64,
 	) (email, steamURL, pathToPhoto string, err error)
+	GetUsers(
+		ctx context.Context,
+	) ([]models.User, error)
 }
 
 type serverAPI struct {
@@ -162,6 +166,11 @@ func (s *serverAPI) UserInfo(
 
 	return &ssov1.UserInfoResponse{Email: email, SteamUrl: steamURL, PathToPhoto: pathToPhoto}, nil
 }
+
+func (s *serverAPI) GetUsers(
+	ctx context.Context,
+	req *ssov1.GetAllUserRequest,
+)
 
 func validateLogin(
 	email string,
