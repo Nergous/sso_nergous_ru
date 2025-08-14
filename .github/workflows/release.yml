@@ -6,12 +6,11 @@ permissions:
 on:
     push:
         tags:
-            - "v*.*.*" # Запуск при пуше тега вида v1.2.3
+            - "v*.*.*"
 
 jobs:
     build:
         runs-on: ubuntu-latest
-
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
