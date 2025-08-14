@@ -46,6 +46,10 @@ type Auth interface {
 	GetUsers(
 		ctx context.Context,
 	) ([]models.User, error)
+	UpdateUser(
+		ctx context.Context,
+		user models.User,
+	) (err error)
 }
 
 type serverAPI struct {
@@ -170,7 +174,68 @@ func (s *serverAPI) UserInfo(
 func (s *serverAPI) GetUsers(
 	ctx context.Context,
 	req *ssov1.GetAllUserRequest,
-)
+) (*ssov1.GetAllUserResponse, error) {
+	users, err := s.auth.GetUsers(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	pbUsers := make([]*ssov1.User, 0, len(users))
+	for _, u := range users {
+		pbUsers = append(pbUsers, &ssov1.User{
+			Id:          u.ID,
+			Email:       u.Email,
+			SteamUrl:    u.SteamURL,
+			PathToPhoto: u.PathToPhoto,
+			IsAdmin:     u.IsAdmin,
+		})
+	}
+
+	return &ssov1.GetAllUserResponse{User: pbUsers}, nil
+}
+
+func (s *serverAPI) UpdateUser(
+	ctx context.Context,
+	req *ssov1.UpdateUserRequest,
+) (*ssov1.UpdateUserResponse, error) {
+	userId := req.GetId()
+	if userId == emptyValue {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	email := req.GetEmail()
+	if email == "" {
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+
+	steamURL := req.GetSteamUrl()
+	if steamURL == "" {
+		return nil, status.Error(codes.InvalidArgument, "steam_url is required")
+	}
+
+	pathToPhoto := req.GetPathToPhoto()
+	if pathToPhoto == "" {
+		return nil, status.Error(codes.InvalidArgument, "path_to_photo is required")
+	}
+
+	isAdmin := req.GetIsAdmin()
+
+	user := models.User{
+		ID:          userId,
+		Email:       email,
+		SteamURL:    steamURL,
+		PathToPhoto: pathToPhoto,
+		IsAdmin:     isAdmin,
+	}
+
+	if err := s.auth.UpdateUser(ctx, user); err != nil {
+		if errors.Is(err, auth.ErrUserNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &ssov1.UpdateUserResponse{}, nil
+}
 
 func validateLogin(
 	email string,

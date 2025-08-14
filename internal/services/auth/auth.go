@@ -37,12 +37,17 @@ type UserSaver interface {
 		steamURL string,
 		pathToPhoto string,
 	) (uid int64, err error)
+	UpdateUser(
+		ctx context.Context,
+		user models.User,
+	) error
 }
 
 type UserProvider interface {
 	User(ctx context.Context, email string) (models.User, error)
 	UserByID(ctx context.Context, id int64) (models.User, error)
 	IsAdmin(ctx context.Context, userID int64) (bool, error)
+	GetUsers(ctx context.Context) ([]models.User, error)
 }
 
 type AppProvider interface {
@@ -244,4 +249,23 @@ func (a *Auth) UserInfo(
 	}
 
 	return usr.Email, usr.SteamURL, usr.PathToPhoto, nil
+}
+
+func (a *Auth) GetUsers(ctx context.Context) ([]models.User, error) {
+	const op = "auth.GetUsers"
+	users, err := a.usrProvider.GetUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return users, nil
+}
+
+func (a *Auth) UpdateUser(ctx context.Context, user models.User) error {
+	const op = "auth.UpdateUser"
+	err := a.usrSaver.UpdateUser(ctx, user)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }

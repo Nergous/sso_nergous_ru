@@ -148,3 +148,48 @@ func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 
 	return app, nil
 }
+
+func (s *Storage) GetUsers(ctx context.Context) ([]models.User, error) {
+	const op = "storage.sqlite.GetUsers"
+
+	stmt, err := s.db.Prepare("SELECT * FROM users;")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.QueryContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		err = rows.Scan(&user.ID, &user.Email, &user.PassHash, &user.SteamURL, &user.PathToPhoto, &user.IsAdmin)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+func (s *Storage) UpdateUser(ctx context.Context, user models.User) error {
+	const op = "storage.sqlite.UpdateUser"
+
+	stmt, err := s.db.Prepare("UPDATE users SET email = ?, is_admin = ?, steam_url = ?, path_to_photo = ? WHERE id = ?;")
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, user.Email, user.IsAdmin, user.SteamURL, user.PathToPhoto, user.ID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
