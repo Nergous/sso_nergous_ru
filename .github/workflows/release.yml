@@ -27,7 +27,7 @@ jobs:
                   go build -ldflags "-X main.version=${GITHUB_REF_NAME} \
                                       -X main.commit=$(git rev-parse --short HEAD) \
                                       -X main.date=$(date +%Y-%m-%d)" \
-                            ./cmd/sso -o main
+                            -o main ./cmd/sso
 
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
