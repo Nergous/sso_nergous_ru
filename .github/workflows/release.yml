@@ -1,0 +1,32 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*.*.*" # Запуск при пуше тега вида v1.2.3
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.22"
+
+            - name: Build binary
+              run: |
+                  go mod tidy
+                  go build -ldflags "-X main.version=${GITHUB_REF_NAME} \
+                                      -X main.commit=$(git rev-parse --short HEAD) \
+                                      -X main.date=$(date +%Y-%m-%d)" \
+                            -o myapp
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: myapp
