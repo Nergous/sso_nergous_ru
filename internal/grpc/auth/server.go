@@ -6,6 +6,7 @@ import (
 
 	"sso/internal/domain/models"
 	"sso/internal/services/auth"
+	"sso/internal/storage/sqlite"
 
 	ssov1 "github.com/Nergous/sso_protos/gen/go/sso"
 	"google.golang.org/grpc"
@@ -48,7 +49,7 @@ type Auth interface {
 	) ([]models.User, error)
 	UpdateUser(
 		ctx context.Context,
-		user UpdateModel,
+		user sqlite.UpdateModel,
 	) (err error)
 }
 
@@ -194,15 +195,6 @@ func (s *serverAPI) GetUsers(
 	return &ssov1.GetAllUserResponse{User: pbUsers}, nil
 }
 
-type UpdateModel struct {
-	ID          int64
-	Email       string
-	Password    string
-	SteamURL    string
-	PathToPhoto string
-	IsAdmin     bool
-}
-
 func (s *serverAPI) UpdateUser(
 	ctx context.Context,
 	req *ssov1.UpdateUserRequest,
@@ -231,7 +223,7 @@ func (s *serverAPI) UpdateUser(
 
 	password := req.GetPassword()
 
-	user := UpdateModel{
+	user := sqlite.UpdateModel{
 		ID:          userId,
 		Email:       email,
 		Password:    password,
