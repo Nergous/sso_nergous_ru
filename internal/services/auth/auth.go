@@ -9,6 +9,7 @@ import (
 
 	"sso/internal/domain/models"
 	"sso/internal/storage"
+	"sso/internal/storage/sqlite"
 	jwt_sso "sso/lib/jwt"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -39,7 +40,7 @@ type UserSaver interface {
 	) (uid int64, err error)
 	UpdateUser(
 		ctx context.Context,
-		user models.User,
+		user sqlite.UpdateModel,
 	) error
 }
 
@@ -261,8 +262,17 @@ func (a *Auth) GetUsers(ctx context.Context) ([]models.User, error) {
 	return users, nil
 }
 
-func (a *Auth) UpdateUser(ctx context.Context, user models.User) error {
+func (a *Auth) UpdateUser(ctx context.Context, user sqlite.UpdateModel) error {
 	const op = "auth.UpdateUser"
+
+	if user.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+		user.Password = string(hashedPassword)
+	}
+
 	err := a.usrSaver.UpdateUser(ctx, user)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)

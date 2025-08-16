@@ -177,18 +177,42 @@ func (s *Storage) GetUsers(ctx context.Context) ([]models.User, error) {
 	return users, nil
 }
 
-func (s *Storage) UpdateUser(ctx context.Context, user models.User) error {
+type UpdateModel struct {
+	ID          int64
+	Email       string
+	Password    string
+	SteamURL    string
+	PathToPhoto string
+	IsAdmin     bool
+}
+
+func (s *Storage) UpdateUser(ctx context.Context, user UpdateModel) error {
 	const op = "storage.sqlite.UpdateUser"
 
-	stmt, err := s.db.Prepare("UPDATE users SET email = ?, is_admin = ?, steam_url = ?, path_to_photo = ? WHERE id = ?;")
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	defer stmt.Close()
+	var stmt *sql.Stmt
+	var err error
+	if user.Password == "" {
+		stmt, err = s.db.Prepare("UPDATE users SET email = ?, is_admin = ?, steam_url = ?, path_to_photo = ? WHERE id = ?;")
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+		defer stmt.Close()
+		_, err = stmt.ExecContext(ctx, user.Email, user.IsAdmin, user.SteamURL, user.PathToPhoto, user.ID)
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
 
-	_, err = stmt.ExecContext(ctx, user.Email, user.IsAdmin, user.SteamURL, user.PathToPhoto, user.ID)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+	} else if user.Password != "" {
+		stmt, err = s.db.Prepare("UPDATE users SET email = ?, is_admin = ?, steam_url = ?, path_to_photo = ?, pass_hash = ? WHERE id = ?;")
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+		defer stmt.Close()
+		_, err = stmt.ExecContext(ctx, user.Email, user.IsAdmin, user.SteamURL, user.PathToPhoto, user.Password, user.ID)
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+
 	}
 
 	return nil

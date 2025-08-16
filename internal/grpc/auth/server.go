@@ -48,7 +48,7 @@ type Auth interface {
 	) ([]models.User, error)
 	UpdateUser(
 		ctx context.Context,
-		user models.User,
+		user UpdateModel,
 	) (err error)
 }
 
@@ -194,6 +194,15 @@ func (s *serverAPI) GetUsers(
 	return &ssov1.GetAllUserResponse{User: pbUsers}, nil
 }
 
+type UpdateModel struct {
+	ID          int64
+	Email       string
+	Password    string
+	SteamURL    string
+	PathToPhoto string
+	IsAdmin     bool
+}
+
 func (s *serverAPI) UpdateUser(
 	ctx context.Context,
 	req *ssov1.UpdateUserRequest,
@@ -220,9 +229,12 @@ func (s *serverAPI) UpdateUser(
 
 	isAdmin := req.GetIsAdmin()
 
-	user := models.User{
+	password := req.GetPassword()
+
+	user := UpdateModel{
 		ID:          userId,
 		Email:       email,
+		Password:    password,
 		SteamURL:    steamURL,
 		PathToPhoto: pathToPhoto,
 		IsAdmin:     isAdmin,
