@@ -48,7 +48,7 @@ type UserProvider interface {
 	User(ctx context.Context, email string) (models.User, error)
 	UserByID(ctx context.Context, id int64) (models.User, error)
 	IsAdmin(ctx context.Context, userID int64) (bool, error)
-	GetUsers(ctx context.Context) ([]models.User, error)
+	GetAllUsers(ctx context.Context) ([]models.User, error)
 }
 
 type AppProvider interface {
@@ -252,9 +252,9 @@ func (a *Auth) UserInfo(
 	return usr.Email, usr.SteamURL, usr.PathToPhoto, nil
 }
 
-func (a *Auth) GetUsers(ctx context.Context) ([]models.User, error) {
+func (a *Auth) GetAllUsers(ctx context.Context) ([]models.User, error) {
 	const op = "auth.GetUsers"
-	users, err := a.usrProvider.GetUsers(ctx)
+	users, err := a.usrProvider.GetAllUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

@@ -149,7 +149,7 @@ func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 	return app, nil
 }
 
-func (s *Storage) GetUsers(ctx context.Context) ([]models.User, error) {
+func (s *Storage) GetAllUsers(ctx context.Context) ([]models.User, error) {
 	const op = "storage.sqlite.GetUsers"
 
 	stmt, err := s.db.Prepare("SELECT * FROM users;")

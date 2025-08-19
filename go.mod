@@ -3,7 +3,7 @@ module sso
 go 1.23.4
 
 require (
-	github.com/Nergous/sso_protos v0.0.0-20250816092902-b98a65cd35e5
+	github.com/Nergous/sso_protos v0.0.0-20250819171115-32d3e7c9be60
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/golang-jwt/jwt/v5 v5.2.2

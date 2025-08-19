@@ -44,7 +44,7 @@ type Auth interface {
 		ctx context.Context,
 		userID int64,
 	) (email, steamURL, pathToPhoto string, err error)
-	GetUsers(
+	GetAllUsers(
 		ctx context.Context,
 	) ([]models.User, error)
 	UpdateUser(
@@ -172,11 +172,11 @@ func (s *serverAPI) UserInfo(
 	return &ssov1.UserInfoResponse{Email: email, SteamUrl: steamURL, PathToPhoto: pathToPhoto}, nil
 }
 
-func (s *serverAPI) GetUsers(
+func (s *serverAPI) GetAllUsers(
 	ctx context.Context,
-	req *ssov1.GetAllUserRequest,
-) (*ssov1.GetAllUserResponse, error) {
-	users, err := s.auth.GetUsers(ctx)
+	req *ssov1.GetAllUsersRequest,
+) (*ssov1.GetAllUsersResponse, error) {
+	users, err := s.auth.GetAllUsers(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -192,7 +192,7 @@ func (s *serverAPI) GetUsers(
 		})
 	}
 
-	return &ssov1.GetAllUserResponse{User: pbUsers}, nil
+	return &ssov1.GetAllUsersResponse{User: pbUsers}, nil
 }
 
 func (s *serverAPI) UpdateUser(
