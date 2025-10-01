@@ -18,13 +18,17 @@ func New(
 	grpcPort int,
 	storagePath string,
 	tokenTTL time.Duration,
+	refreshTTL time.Duration,
 ) *App {
 	storage, err := sqlite.New(storagePath)
 	if err != nil {
 		panic(err)
 	}
 
-	authService := auth.New(log, storage, storage, storage, tokenTTL)
+	storage.StartCleanupRoutine(24 * time.Hour)
+	log.Info("started refresh tokens cleanup routine", slog.String("interval", "24h"))
+
+	authService := auth.New(log, storage, storage, storage, tokenTTL, refreshTTL, storage)
 
 	grpcApp := grpcapp.New(log, grpcPort, authService)
 	return &App{

@@ -24,7 +24,15 @@ type Auth interface {
 		email string,
 		password string,
 		appId int32,
-	) (token string, err error)
+	) (accessToken string, refreshToken string, err error)
+	Logout(
+		ctx context.Context,
+		accessToken string,
+	) error
+	Refresh(
+		ctx context.Context,
+		refreshToken string,
+	) (accessToken string, refreshTokenNew string, err error)
 	RegisterNewUser(
 		ctx context.Context,
 		email string,
@@ -74,7 +82,7 @@ func (s *serverAPI) Login(
 		return nil, err
 	}
 
-	token, err := s.auth.Login(ctx, email, password, appID)
+	accessToken, refreshToken, err := s.auth.Login(ctx, email, password, appID)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, "invalid credentials")
@@ -82,7 +90,47 @@ func (s *serverAPI) Login(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &ssov1.LoginResponse{Token: token}, nil
+	return &ssov1.LoginResponse{AccessToken: accessToken, RefreshToken: refreshToken}, nil
+}
+
+func (s *serverAPI) Logout(
+	ctx context.Context,
+	req *ssov1.LogoutRequest,
+) (*ssov1.LogoutResponse, error) {
+	accessToken := req.GetToken()
+	if accessToken == "" {
+		return nil, status.Error(codes.InvalidArgument, "access_token is required")
+	}
+
+	err := s.auth.Logout(ctx, accessToken)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &ssov1.LogoutResponse{}, nil
+}
+
+func (s *serverAPI) Refresh(
+	ctx context.Context,
+	req *ssov1.RefreshRequest,
+) (*ssov1.LoginResponse, error) {
+	refreshToken := req.GetRefreshToken()
+	if refreshToken == "" {
+		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
+	}
+
+	accessToken, newRefreshToken, err := s.auth.Refresh(ctx, refreshToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &ssov1.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
 }
 
 func (s *serverAPI) Register(

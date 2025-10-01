@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -23,11 +25,19 @@ var (
 )
 
 type Auth struct {
-	log         *slog.Logger
-	usrSaver    UserSaver
-	usrProvider UserProvider
-	appProvider AppProvider
-	tokenTTL    time.Duration
+	log             *slog.Logger
+	usrSaver        UserSaver
+	usrProvider     UserProvider
+	appProvider     AppProvider
+	tokenTTL        time.Duration
+	refreshTTL      time.Duration
+	refreshProvider RefreshTokenProvider
+}
+
+type RefreshTokenProvider interface {
+	SaveRefreshToken(ctx context.Context, token string, userID int64, appID int32, expiresAt time.Time) error
+	GetRefreshToken(ctx context.Context, token string) (userID int64, appID int32, expiresAt time.Time, err error)
+	DeleteRefreshToken(ctx context.Context, token string) error
 }
 
 type UserSaver interface {
@@ -62,14 +72,98 @@ func New(
 	usrProvider UserProvider,
 	appProvider AppProvider,
 	tokenTTL time.Duration,
+	refreshTTL time.Duration,
+	refreshProvider RefreshTokenProvider,
 ) *Auth {
 	return &Auth{
-		log:         log,
-		usrSaver:    usrSaver,
-		usrProvider: usrProvider,
-		appProvider: appProvider,
-		tokenTTL:    tokenTTL,
+		log:             log,
+		usrSaver:        usrSaver,
+		usrProvider:     usrProvider,
+		appProvider:     appProvider,
+		tokenTTL:        tokenTTL,
+		refreshTTL:      refreshTTL,
+		refreshProvider: refreshProvider,
 	}
+}
+
+func (a *Auth) Refresh(
+	ctx context.Context,
+	refreshToken string,
+) (accessToken string, refreshTokenNew string, err error) {
+	const op = "auth.Refresh"
+
+	log := a.log.With(slog.String("op", op))
+	log.Info("refreshing token")
+
+	userID, appID, expiresAt, err := a.refreshProvider.GetRefreshToken(ctx, refreshToken)
+	if err != nil {
+		if errors.Is(err, storage.ErrRefreshTokenNotFound) {
+			log.Warn("refresh token not found")
+			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+		log.Error("failed to get refresh token", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	if time.Now().After(expiresAt) {
+		// Удаляем просроченный токен
+		_ = a.refreshProvider.DeleteRefreshToken(ctx, refreshToken)
+		log.Warn("refresh token expired")
+		return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+	}
+
+	user, err := a.usrProvider.UserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Warn("user not found")
+			return "", "", fmt.Errorf("%s: %w", op, ErrUserNotFound)
+		}
+		log.Error("failed to get user", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	// 4. Получаем данные приложения
+	app, err := a.appProvider.App(ctx, appID)
+	if err != nil {
+		if errors.Is(err, storage.ErrAppNotFound) {
+			log.Warn("app not found")
+			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+		log.Error("failed to get app", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	// 5. Генерируем новый access токен
+	accessToken, err = jwt_sso.NewToken(user, app, a.tokenTTL)
+	if err != nil {
+		log.Error("failed to generate access token", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	// 6. Генерируем новый refresh токен
+	newRefreshToken, err := generateRefreshToken()
+	if err != nil {
+		log.Error("failed to generate refresh token", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	// 7. Сохраняем новый refresh токен
+	newExpiresAt := time.Now().Add(a.refreshTTL)
+	err = a.refreshProvider.SaveRefreshToken(ctx, newRefreshToken, userID, appID, newExpiresAt)
+	if err != nil {
+		log.Error("failed to save refresh token", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	// 8. Удаляем старый refresh токен (ротация токенов)
+	err = a.refreshProvider.DeleteRefreshToken(ctx, refreshToken)
+	if err != nil {
+		log.Warn("failed to delete old refresh token", slog.String("error", err.Error()))
+		// Не прерываем выполнение, т.к. новые токены уже сгенерированы
+	}
+
+	log.Info("tokens refreshed successfully")
+	return accessToken, newRefreshToken, nil
 }
 
 func (a *Auth) Login(
@@ -77,7 +171,7 @@ func (a *Auth) Login(
 	email string,
 	password string,
 	appId int32,
-) (token string, err error) {
+) (accessToken string, refreshToken string, err error) {
 	const op = "auth.Login"
 
 	log := a.log.With(
@@ -90,38 +184,78 @@ func (a *Auth) Login(
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			a.log.Warn("user not found", slog.String("error", err.Error()))
-			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
 
 		a.log.Error("failed to get user", slog.String("error", err.Error()))
 
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
 		a.log.Warn("invalid password", slog.String("error", err.Error()))
-		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	app, err := a.appProvider.App(ctx, appId)
 	if err != nil {
 		if errors.Is(err, storage.ErrAppNotFound) {
 			a.log.Warn("app not found", slog.String("error", err.Error()))
-			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
 
 		a.log.Error("failed to get app", slog.String("error", err.Error()))
 
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	token, err = jwt_sso.NewToken(user, app, a.tokenTTL)
+	accessToken, err = jwt_sso.NewToken(user, app, a.tokenTTL)
 	if err != nil {
 		a.log.Error("failed to generate token", slog.String("error", err.Error()))
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	return token, nil
+	refreshToken, err = generateRefreshToken()
+	if err != nil {
+		a.log.Error("failed to generate refresh token", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	expiresAt := time.Now().Add(a.refreshTTL)
+	err = a.refreshProvider.SaveRefreshToken(ctx, refreshToken, user.ID, appId, expiresAt)
+	if err != nil {
+		a.log.Error("failed to save refresh token", slog.String("error", err.Error()))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+func (a *Auth) Logout(ctx context.Context, accessToken string) error {
+	if accessToken == "" {
+		return errors.New("access token is required")
+	}
+
+	err := a.refreshProvider.DeleteRefreshToken(ctx, accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to delete refresh token: %w", err)
+	}
+
+	return nil
+}
+
+func generateRefreshToken() (string, error) {
+	// Генерируем случайную строку для refresh токена
+	// Можно использовать UUID или криптографически безопасную случайную строку
+	const tokenLength = 32
+	bytes := make([]byte, tokenLength)
+
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
 func (a *Auth) RegisterNewUser(
