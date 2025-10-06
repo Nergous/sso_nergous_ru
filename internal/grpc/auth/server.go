@@ -97,12 +97,12 @@ func (s *serverAPI) Logout(
 	ctx context.Context,
 	req *ssov1.LogoutRequest,
 ) (*ssov1.LogoutResponse, error) {
-	accessToken := req.GetToken()
-	if accessToken == "" {
-		return nil, status.Error(codes.InvalidArgument, "access_token is required")
+	refreshToken := req.GetToken()
+	if refreshToken == "" {
+		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
 	}
 
-	err := s.auth.Logout(ctx, accessToken)
+	err := s.auth.Logout(ctx, refreshToken)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

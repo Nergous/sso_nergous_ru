@@ -231,12 +231,12 @@ func (a *Auth) Login(
 	return accessToken, refreshToken, nil
 }
 
-func (a *Auth) Logout(ctx context.Context, accessToken string) error {
-	if accessToken == "" {
-		return errors.New("access token is required")
+func (a *Auth) Logout(ctx context.Context, refreshToken string) error {
+	if refreshToken == "" {
+		return errors.New("refresh token is required")
 	}
 
-	err := a.refreshProvider.DeleteRefreshToken(ctx, accessToken)
+	err := a.refreshProvider.DeleteRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return fmt.Errorf("failed to delete refresh token: %w", err)
 	}
