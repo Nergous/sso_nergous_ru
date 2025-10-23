@@ -59,6 +59,10 @@ type Auth interface {
 		ctx context.Context,
 		user sqlite.UpdateModel,
 	) (err error)
+	DeleteUser(
+		ctx context.Context,
+		userID int64,
+	) error
 }
 
 type serverAPI struct {
@@ -287,6 +291,21 @@ func (s *serverAPI) UpdateUser(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &ssov1.UpdateUserResponse{}, nil
+}
+
+func (s *serverAPI) DeleteUser(ctx context.Context, req *ssov1.DeleteUserRequest) (*ssov1.DeleteUserResponse, error) {
+	userId := req.GetId()
+	if userId == emptyValue {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	if err := s.auth.DeleteUser(ctx, userId); err != nil {
+		if errors.Is(err, auth.ErrUserNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &ssov1.DeleteUserResponse{}, nil
 }
 
 func validateLogin(

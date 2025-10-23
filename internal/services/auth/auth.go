@@ -52,6 +52,10 @@ type UserSaver interface {
 		ctx context.Context,
 		user sqlite.UpdateModel,
 	) error
+	DeleteUser(
+		ctx context.Context,
+		userID int64,
+	) error
 }
 
 type UserProvider interface {
@@ -408,6 +412,15 @@ func (a *Auth) UpdateUser(ctx context.Context, user sqlite.UpdateModel) error {
 	}
 
 	err := a.usrSaver.UpdateUser(ctx, user)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (a *Auth) DeleteUser(ctx context.Context, userID int64) error {
+	const op = "auth.DeleteUser"
+	err := a.usrSaver.DeleteUser(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

@@ -400,3 +400,20 @@ func (s *Storage) UpdateUser(ctx context.Context, user UpdateModel) error {
 
 	return nil
 }
+
+func (s *Storage) DeleteUser(ctx context.Context, userID int64) error {
+	const op = "storage.sqlite.DeleteUser"
+
+	stmt, err := s.db.Prepare("DELETE FROM users WHERE id = ?;")
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
