@@ -5,8 +5,10 @@ import (
 	"time"
 
 	grpcapp "sso/internal/app/grpc"
-	"sso/internal/services/auth"
-	"sso/internal/storage/sqlite"
+	"sso/internal/controllers"
+	"sso/internal/repositories"
+	"sso/internal/services"
+	"sso/internal/storage/mariadb"
 )
 
 type App struct {
@@ -16,21 +18,33 @@ type App struct {
 func New(
 	log *slog.Logger,
 	grpcPort int,
-	storagePath string,
+	dsn string,
 	tokenTTL time.Duration,
 	refreshTTL time.Duration,
+	defaultSecret string,
 ) *App {
-	storage, err := sqlite.New(storagePath)
+	storage, err := mariadb.NewStorage(dsn)
 	if err != nil {
 		panic(err)
 	}
 
-	storage.StartCleanupRoutine(24 * time.Hour)
-	log.Info("started refresh tokens cleanup routine", slog.String("interval", "24h"))
+	if err := storage.Migrate(); err != nil {
+		panic(err)
+	}
 
-	authService := auth.New(log, storage, storage, storage, tokenTTL, refreshTTL, storage)
+	userR := repositories.NewUserRepo(storage)
+	appR := repositories.NewAppRepo(storage)
+	tokenR := repositories.NewTokenRepo(storage)
 
-	grpcApp := grpcapp.New(log, grpcPort, authService)
+	userS := services.NewUserService(log, userR)
+	appS := services.NewAppService(log, appR)
+	authS := services.NewAuthService(log, storage, tokenTTL, refreshTTL, userR, appR, tokenR)
+
+	userC := controllers.NewUserController(userS)
+	appC := controllers.NewAppController(appS, defaultSecret)
+	authC := controllers.NewAuthController(authS)
+
+	grpcApp := grpcapp.New(log, grpcPort, authC, userC, appC)
 	return &App{
 		GRPCServer: grpcApp,
 	}
