@@ -2,6 +2,8 @@ package config
 
 import (
 	"flag"
+	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -9,11 +11,20 @@ import (
 )
 
 type Config struct {
-	Env         string        `yaml:"env" env-default:"local"`
-	StoragePath string        `yaml:"storage_path" env-required:"true"`
-	TokenTTL    time.Duration `yaml:"token_ttl" env-required:"true"`
-	RefreshTTL  time.Duration `yaml:"refresh_ttl" env-required:"true"`
-	GRPC        GRPCConfig    `yaml:"grpc"`
+	Env           string        `yaml:"env" env-default:"local"`
+	DB            Database      `yaml:"database"`
+	TokenTTL      time.Duration `yaml:"token_ttl" env-required:"true"`
+	RefreshTTL    time.Duration `yaml:"refresh_ttl" env-required:"true"`
+	GRPC          GRPCConfig    `yaml:"grpc"`
+	DefaultSecret string        `yaml:"default_secret" env-required:"true"`
+}
+
+type Database struct {
+	Host       string `yaml:"host" env:"HOST" env-default:"localhost"`
+	Port       int    `yaml:"port" env:"PORT" env-required:"true"`
+	UsernameDB string `yaml:"username-db" env:"USERNAMEDB" env-required:"true"`
+	Password   string `yaml:"password" env:"PASSWORD"`
+	DBName     string `yaml:"dbname" env:"DBNAME" env-default:"games"`
 }
 
 type GRPCConfig struct {
@@ -57,4 +68,19 @@ func fetchConfigPath() string {
 		res = os.Getenv("CONFIG_PATH")
 	}
 	return res
+}
+
+func (cfg *Database) GetDSN() string {
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?parseTime=true",
+		cfg.UsernameDB,
+		cfg.Password,
+		cfg.Host,
+		cfg.Port,
+		cfg.DBName,
+	)
+
+	log.Print(dsn)
+
+	return dsn
 }

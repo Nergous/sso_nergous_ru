@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -9,9 +8,6 @@ import (
 
 	"sso/internal/app"
 	"sso/internal/config"
-
-	"github.com/blang/semver"
-	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
 const (
@@ -19,25 +15,15 @@ const (
 	envProd  = "prod"
 )
 
-var (
-	version = "0.0.0"
-	commit  = "none"
-	date    = "unknown"
-)
-
 func main() {
-	checkUpdate()
-	fmt.Printf("Version: %s\nCommit: %s\nBuild date: %s\n", version, commit, date)
 	cfg := config.MustLoad()
-
 	log := setupLogger(cfg.Env)
 
 	log.Info("starting app",
 		slog.String("env", cfg.Env),
-		slog.String("storage_path", cfg.StoragePath),
 		slog.Int("port", cfg.GRPC.Port))
 
-	application := app.New(log, cfg.GRPC.Port, cfg.StoragePath, cfg.TokenTTL, cfg.RefreshTTL)
+	application := app.New(log, cfg.GRPC.Port, cfg.DB.GetDSN(), cfg.TokenTTL, cfg.RefreshTTL, cfg.DefaultSecret)
 
 	go application.GRPCServer.MustRun()
 
@@ -69,22 +55,4 @@ func setupLogger(env string) *slog.Logger {
 	}
 
 	return log
-}
-
-func checkUpdate() {
-	v, err := semver.Parse(version)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	latest, err := selfupdate.UpdateSelf(v, "nergous/sso_nergous_ru")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if latest.Version.Equals(v) {
-		fmt.Println("Обновлено до версии: ", latest.Version)
-	} else {
-		fmt.Println("Вы используете последнюю версию")
-	}
 }
