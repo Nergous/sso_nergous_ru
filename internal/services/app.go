@@ -131,3 +131,15 @@ func (s *AppService) IsAdmin(
 
 	return isAdmin, nil
 }
+
+func (s *AppService) GetAllUsersForApp(ctx *context.Context, appID uint32) ([]models.AppUser, error) {
+	const op = "auth.GetAllUsersForApp"
+
+	users, err := s.appR.GetAllUsersForApp(ctx, appID)
+	ok, err := serr.Gerr(op, "users not found", "failed to get users", s.log, err)
+	if !ok {
+		return []models.AppUser{}, err
+	}
+
+	return users, nil
+}

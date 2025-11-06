@@ -84,9 +84,9 @@ func (a *AuthService) Login(
 	}
 
 	isAdmin, err := a.appR.IsAdmin(ctx, user.ID, appId)
-	ok, err = serr.Gerr(op, "user not found", "failed to get admin", a.log, err)
+	ok, _ = serr.Gerr(op, "user not found", "failed to get admin", a.log, err)
 	if !ok {
-		return "", "", err
+		isAdmin = false
 	}
 
 	accessToken, err = jwt_sso.NewAccessToken(

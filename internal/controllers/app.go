@@ -214,3 +214,32 @@ func (c *AppController) IsAdmin(
 
 	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
 }
+
+func (C *AppController) GetAllUsersForApp(ctx context.Context, req *ssov1.GetAllUsersForAppRequest) (*ssov1.GetAllUsersForAppResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	appID := req.GetAppId()
+
+	if appID == emptyValue {
+		return nil, status.Error(codes.InvalidArgument, "app_id is required")
+	}
+
+	users, err := C.AppS.GetAllUsersForApp(&ctx, appID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	var appUser []*ssov1.AppUser
+	for _, user := range users {
+		appUser = append(appUser, &ssov1.AppUser{
+			Id:          user.ID,
+			Email:       user.Email,
+			SteamUrl:    user.SteamURL,
+			PathToPhoto: user.PathToPhoto,
+			IsAdmin:     user.IsAdmin,
+		})
+	}
+
+	return &ssov1.GetAllUsersForAppResponse{Users: appUser}, nil
+}

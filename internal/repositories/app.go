@@ -104,3 +104,14 @@ func (r *AppRepo) AddAdmin(ctx *context.Context, admin *models.Admin) error {
 func (r *AppRepo) RemoveAdmin(ctx *context.Context, userID uint32, appID uint32) error {
 	return r.storage.DB.WithContext(*ctx).Delete(&models.Admin{}, "user_id = ? AND app_id = ?", userID, appID).Error
 }
+
+func (r *AppRepo) GetAllUsersForApp(ctx *context.Context, appID uint32) ([]models.AppUser, error) {
+	var users []models.AppUser
+
+	err := r.storage.DB.WithContext(*ctx).Select("users.id, users.email, users.steam_url, users.path_to_photo, admins.is_admin, admins.app_id").Where("admins.app_id = ?", appID).Joins("JOIN admins ON users.id = admins.user_id").Find(&users).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}

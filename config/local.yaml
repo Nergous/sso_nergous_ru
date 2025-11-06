@@ -3,14 +3,14 @@ storage_path: "./storage/sso.db"
 token_ttl: 30m
 refresh_ttl: 24h
 grpc:
-    port: 44044
-    timeout: 5s
+  port: 44044
+  timeout: 5s
 
 database:
-    host: localhost
-    port: 3306
-    username-db: root
-    password:
-    dbname: sso
+  host: localhost
+  port: 3306
+  username-db: root
+  password: 31415926
+  dbname: sso
 
 default_secret: "secret"

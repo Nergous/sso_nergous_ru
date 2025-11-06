@@ -7,3 +7,9 @@ type User struct {
 	SteamURL    string `gorm:"not null;"`
 	PathToPhoto string `gorm:"not null;"`
 }
+
+type AppUser struct {
+	User
+	AppID   uint32
+	IsAdmin bool
+}
