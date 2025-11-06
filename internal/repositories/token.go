@@ -52,6 +52,19 @@ func (r *TokenRepo) DeleteRefreshToken(
 	return nil
 }
 
+func (r *TokenRepo) DeleteRefreshTokenByIDs(
+	ctx *context.Context,
+	userID uint32,
+	appID uint32,
+) error {
+	rows := r.storage.DB.WithContext(*ctx).Where("user_id = ? AND app_id = ?", userID, appID).Delete(&models.RefreshToken{})
+	if rows.Error != nil {
+		return rows.Error
+	}
+
+	return nil
+}
+
 func (r *TokenRepo) GetUserByRefreshToken(
 	ctx *context.Context,
 	token string,

@@ -115,6 +115,11 @@ func (a *AuthService) Login(
 
 	expiresAt := time.Now().Add(a.refreshTTL)
 
+	err = a.tokenR.DeleteRefreshTokenByIDs(ctx, user.ID, appId)
+	if err != nil {
+		return "", "", err
+	}
+
 	_, err = a.tokenR.CreateRefreshToken(ctx, &models.RefreshToken{
 		Token:     refreshToken,
 		UserID:    user.ID,
