@@ -2,9 +2,12 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"sso/internal/models"
 	"sso/internal/storage/mariadb"
+
+	"gorm.io/gorm"
 )
 
 type AppRepo struct {
@@ -82,6 +85,9 @@ func (r *AppRepo) IsAdmin(ctx *context.Context, userID uint32, appID uint32) (bo
 	var admin models.Admin
 	rows := r.storage.DB.WithContext(*ctx).Where("user_id = ? AND app_id = ?", userID, appID).First(&admin)
 	if rows.Error != nil {
+		if errors.Is(rows.Error, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
 		return false, rows.Error
 	}
 

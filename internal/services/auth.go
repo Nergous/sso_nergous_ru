@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 var (
@@ -84,9 +85,12 @@ func (a *AuthService) Login(
 	}
 
 	isAdmin, err := a.appR.IsAdmin(ctx, user.ID, appId)
-	ok, _ = serr.Gerr(op, "user not found", "failed to get admin", a.log, err)
-	if !ok {
-		isAdmin = false
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			isAdmin = false
+		} else {
+			return "", "", err
+		}
 	}
 
 	accessToken, err = jwt_sso.NewAccessToken(
@@ -258,9 +262,12 @@ func (a *AuthService) Refresh(
 	}
 
 	isAdmin, err := a.appR.IsAdmin(ctx, user.ID, rTkn.AppID)
-	ok, err = serr.Gerr(op, "admin not found", "failed to get admin", a.log, err)
-	if !ok {
-		return "", "", err
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			isAdmin = false
+		} else {
+			return "", "", err
+		}
 	}
 
 	app, err := a.appR.GetAppByID(ctx, rTkn.AppID)

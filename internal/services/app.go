@@ -2,11 +2,14 @@ package services
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"sso/internal/models"
 	"sso/internal/repositories"
 	serr "sso/lib/serr"
+
+	"gorm.io/gorm"
 )
 
 type AppService struct {
@@ -120,13 +123,14 @@ func (s *AppService) IsAdmin(
 	userID uint32,
 	appID uint32,
 ) (isAdmin bool, err error) {
-	const op = "auth.IsAdmin"
 
 	isAdmin, err = s.appR.IsAdmin(ctx, userID, appID)
-	ok, err := serr.Gerr(op, "user not found", "failed to get admin", s.log, err)
-
-	if !ok {
-		return false, err
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		} else {
+			return false, err
+		}
 	}
 
 	return isAdmin, nil
