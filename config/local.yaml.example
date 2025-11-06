@@ -1,0 +1,16 @@
+env: "local"
+storage_path: "./storage/sso.db"
+token_ttl: 30m
+refresh_ttl: 24h
+grpc:
+  port: 44044
+  timeout: 5s
+
+database:
+  host: localhost
+  port: 3306
+  username-db: root
+  password: 1111
+  dbname: sso
+
+default_secret: "secret"

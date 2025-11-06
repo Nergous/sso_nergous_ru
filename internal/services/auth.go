@@ -68,7 +68,7 @@ func (a *AuthService) Login(
 	}
 
 	ok, _ = serr.LogFerr(
-		bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)),
+		bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)),
 		op,
 		"invalid password",
 		a.log,
@@ -159,7 +159,7 @@ func (a *AuthService) RegisterNewUser(
 
 	id, err = a.userR.CreateUser(ctx, &models.User{
 		Email:       email,
-		PassHash:    passHash,
+		PassHash:    string(passHash),
 		SteamURL:    steamURL,
 		PathToPhoto: pathToPhoto,
 	})

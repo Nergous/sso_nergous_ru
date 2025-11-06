@@ -92,7 +92,7 @@ func (a *UserService) UpdateUser(ctx *context.Context, user *UpdateModel) error 
 		err = a.userR.UpdateUser(ctx, models.User{
 			ID:          user.ID,
 			Email:       user.Email,
-			PassHash:    passHash,
+			PassHash:    string(passHash),
 			SteamURL:    user.SteamURL,
 			PathToPhoto: user.PathToPhoto,
 		})
