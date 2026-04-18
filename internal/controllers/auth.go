@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"sso/internal/services"
@@ -107,17 +106,13 @@ func (c *AuthController) Register(
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	fmt.Println("=================")
-	fmt.Println("REGISTERING")
-	fmt.Println("=================")
-
 	email := req.GetEmail()
 	password := req.GetPassword()
 	steamURL := req.GetSteamUrl()
 	pathToPhoto := req.GetPathToPhoto()
 
 	if err := validateRegister(email, password, steamURL, pathToPhoto); err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	userID, err := c.AuthS.RegisterNewUser(&ctx, email, password, steamURL, pathToPhoto)

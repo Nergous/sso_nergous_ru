@@ -10,7 +10,7 @@ database:
   host: localhost
   port: 3306
   username-db: root
-  password: 31415926
+  password:
   dbname: sso
 
 default_secret: "secret"
