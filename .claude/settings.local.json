@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go list *)",
+      "Bash(go env *)",
+      "Bash(GOPROXY=direct go list -m -u github.com/Nergous/sso_protos@latest)",
+      "Bash(go build *)"
+    ]
+  }
+}
