@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"time"
 
 	"sso/internal/services"
 
@@ -29,9 +28,6 @@ func (c *UserController) UserInfo(
 	ctx context.Context,
 	req *ssov1.UserInfoRequest,
 ) (*ssov1.UserInfoResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	userID := req.GetUserId()
 
 	if userID == 0 {
@@ -50,9 +46,6 @@ func (c *UserController) GetAllUsers(
 	ctx context.Context,
 	req *ssov1.GetAllUsersRequest,
 ) (*ssov1.GetAllUsersResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	users, err := c.UserS.GetAllUsers(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -75,9 +68,6 @@ func (c *UserController) UpdateUser(
 	ctx context.Context,
 	req *ssov1.UpdateUserRequest,
 ) (*ssov1.UpdateUserResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	userID := req.GetId()
 	email := req.GetEmail()
 	password := req.GetPassword()
@@ -104,9 +94,6 @@ func (c *UserController) UpdateUser(
 }
 
 func (c *UserController) DeleteUser(ctx context.Context, req *ssov1.DeleteUserRequest) (*ssov1.DeleteUserResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	userID := req.GetId()
 
 	if userID == 0 {

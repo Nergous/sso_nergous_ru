@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"time"
 
 	"sso/internal/services"
 
@@ -34,9 +33,6 @@ func (c *AuthController) Login(
 	ctx context.Context,
 	req *ssov1.LoginRequest,
 ) (*ssov1.LoginResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	email := req.GetEmail()
 	password := req.GetPassword()
 	appID := req.GetAppId()
@@ -60,9 +56,6 @@ func (c *AuthController) Logout(
 	ctx context.Context,
 	req *ssov1.LogoutRequest,
 ) (*ssov1.LogoutResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	refreshToken := req.GetToken()
 	if refreshToken == "" {
 		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
@@ -80,9 +73,6 @@ func (c *AuthController) Refresh(
 	ctx context.Context,
 	req *ssov1.RefreshRequest,
 ) (*ssov1.LoginResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	refreshToken := req.GetRefreshToken()
 	if refreshToken == "" {
 		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
@@ -103,9 +93,6 @@ func (c *AuthController) Register(
 	ctx context.Context,
 	req *ssov1.RegisterRequest,
 ) (*ssov1.RegisterResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	email := req.GetEmail()
 	password := req.GetPassword()
 	steamURL := req.GetSteamUrl()
@@ -127,9 +114,6 @@ func (c *AuthController) ValidateToken(
 	ctx context.Context,
 	req *ssov1.ValidateTokenRequest,
 ) (*ssov1.ValidateTokenResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	token := req.GetToken()
 
 	if token == "" {

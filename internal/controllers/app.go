@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"time"
 
 	"sso/internal/services"
 
@@ -27,9 +26,6 @@ func RegisterApp(gRPC *grpc.Server, appS services.AppService, defaultSecret stri
 }
 
 func (c *AppController) GetApp(ctx context.Context, req *ssov1.GetAppRequest) (*ssov1.GetAppResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	appID := req.GetId()
 
 	if appID == 0 {
@@ -52,9 +48,6 @@ func (c *AppController) GetApp(ctx context.Context, req *ssov1.GetAppRequest) (*
 }
 
 func (c *AppController) GetAllApps(ctx context.Context, req *ssov1.GetAllAppsRequest) (*ssov1.GetAllAppsResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	apps, err := c.AppS.GetAllApps(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -74,9 +67,6 @@ func (c *AppController) GetAllApps(ctx context.Context, req *ssov1.GetAllAppsReq
 }
 
 func (c *AppController) CreateApp(ctx context.Context, req *ssov1.CreateAppRequest) (*ssov1.CreateAppResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	name := req.GetName()
 	link := req.GetLink()
 
@@ -100,9 +90,6 @@ func (c *AppController) CreateApp(ctx context.Context, req *ssov1.CreateAppReque
 }
 
 func (c *AppController) UpdateApp(ctx context.Context, req *ssov1.UpdateAppRequest) (*ssov1.UpdateAppResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	appID := req.GetId()
 	name := req.GetName()
 	link := req.GetLink()
@@ -120,9 +107,6 @@ func (c *AppController) UpdateApp(ctx context.Context, req *ssov1.UpdateAppReque
 }
 
 func (c *AppController) DeleteApp(ctx context.Context, req *ssov1.DeleteAppRequest) (*ssov1.DeleteAppResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	appID := req.GetId()
 
 	if appID == 0 {
@@ -138,9 +122,6 @@ func (c *AppController) DeleteApp(ctx context.Context, req *ssov1.DeleteAppReque
 }
 
 func (c *AppController) ChangeStatusApp(ctx context.Context, req *ssov1.ChangeStatusAppRequest) (*ssov1.ChangeStatusAppResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	appID := req.GetId()
 
 	if appID == 0 {
@@ -156,9 +137,6 @@ func (c *AppController) ChangeStatusApp(ctx context.Context, req *ssov1.ChangeSt
 }
 
 func (c *AppController) AddAdmin(ctx context.Context, req *ssov1.AddAdminRequest) (*ssov1.AddAdminResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	userID := req.GetUserId()
 	appID := req.GetAppId()
 
@@ -175,9 +153,6 @@ func (c *AppController) AddAdmin(ctx context.Context, req *ssov1.AddAdminRequest
 }
 
 func (c *AppController) RemoveAdmin(ctx context.Context, req *ssov1.RemoveAdminRequest) (*ssov1.RemoveAdminResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	userID := req.GetUserId()
 	appID := req.GetAppId()
 
@@ -197,9 +172,6 @@ func (c *AppController) IsAdmin(
 	ctx context.Context,
 	req *ssov1.IsAdminRequest,
 ) (*ssov1.IsAdminResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	userID := req.GetUserId()
 	appID := req.GetAppId()
 
@@ -216,9 +188,6 @@ func (c *AppController) IsAdmin(
 }
 
 func (C *AppController) GetAllUsersForApp(ctx context.Context, req *ssov1.GetAllUsersForAppRequest) (*ssov1.GetAllUsersForAppResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	appID := req.GetAppId()
 
 	if appID == emptyValue {
