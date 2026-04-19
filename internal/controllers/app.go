@@ -36,7 +36,7 @@ func (c *AppController) GetApp(ctx context.Context, req *ssov1.GetAppRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "app_id is required")
 	}
 
-	app, err := c.AppS.GetApp(&ctx, appID)
+	app, err := c.AppS.GetApp(ctx, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -55,7 +55,7 @@ func (c *AppController) GetAllApps(ctx context.Context, req *ssov1.GetAllAppsReq
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	apps, err := c.AppS.GetAllApps(&ctx)
+	apps, err := c.AppS.GetAllApps(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -84,7 +84,7 @@ func (c *AppController) CreateApp(ctx context.Context, req *ssov1.CreateAppReque
 		return nil, status.Error(codes.InvalidArgument, "name and link are required")
 	}
 	defaultSecret := c.DefaultSecret
-	appID, err := c.AppS.CreateApp(&ctx, name, link, defaultSecret)
+	appID, err := c.AppS.CreateApp(ctx, name, link, defaultSecret)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -111,7 +111,7 @@ func (c *AppController) UpdateApp(ctx context.Context, req *ssov1.UpdateAppReque
 		return nil, status.Error(codes.InvalidArgument, "app_id, name and link are required")
 	}
 
-	err := c.AppS.UpdateApp(&ctx, appID, name, link)
+	err := c.AppS.UpdateApp(ctx, appID, name, link)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -129,7 +129,7 @@ func (c *AppController) DeleteApp(ctx context.Context, req *ssov1.DeleteAppReque
 		return nil, status.Error(codes.InvalidArgument, "app_id is required")
 	}
 
-	err := c.AppS.DeleteApp(&ctx, appID)
+	err := c.AppS.DeleteApp(ctx, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -147,7 +147,7 @@ func (c *AppController) ChangeStatusApp(ctx context.Context, req *ssov1.ChangeSt
 		return nil, status.Error(codes.InvalidArgument, "app_id is required")
 	}
 
-	err := c.AppS.ChangeStatusApp(&ctx, appID)
+	err := c.AppS.ChangeStatusApp(ctx, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -166,7 +166,7 @@ func (c *AppController) AddAdmin(ctx context.Context, req *ssov1.AddAdminRequest
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	err := c.AppS.AddAdmin(&ctx, userID, appID)
+	err := c.AppS.AddAdmin(ctx, userID, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -185,7 +185,7 @@ func (c *AppController) RemoveAdmin(ctx context.Context, req *ssov1.RemoveAdminR
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	err := c.AppS.RemoveAdmin(&ctx, userID, appID)
+	err := c.AppS.RemoveAdmin(ctx, userID, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -207,7 +207,7 @@ func (c *AppController) IsAdmin(
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	isAdmin, err := c.AppS.IsAdmin(&ctx, userID, appID)
+	isAdmin, err := c.AppS.IsAdmin(ctx, userID, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -225,7 +225,7 @@ func (C *AppController) GetAllUsersForApp(ctx context.Context, req *ssov1.GetAll
 		return nil, status.Error(codes.InvalidArgument, "app_id is required")
 	}
 
-	users, err := C.AppS.GetAllUsersForApp(&ctx, appID)
+	users, err := C.AppS.GetAllUsersForApp(ctx, appID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
