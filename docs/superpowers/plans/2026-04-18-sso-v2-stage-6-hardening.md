@@ -329,59 +329,156 @@ git commit -m "feat(grpc): IP-based rate limit on Login/Register"
 
 ---
 
-## Task 4: Секреты — только через env
+## Task 4: Секреты + .env + driver config
 
-- [ ] **Step 4.1: config — убрать default_secret из YAML**
+- [ ] **Step 4.1: Зависимость godotenv (если не в транзитиве)**
 
-`internal/config/config.go` — у поля `DefaultSecret`:
+```bash
+go get github.com/joho/godotenv@latest
+go mod tidy
+```
+
+(Уже в transitive через cleanenv, но сделаем прямой зависимостью — читаем `.env` в main).
+
+- [ ] **Step 4.2: config — убрать default_secret из YAML, добавить Driver**
+
+`internal/config/config.go`:
 
 ```go
-DefaultSecret string `env:"DEFAULT_SECRET" env-required:"true"`
+type Database struct {
+	Driver     string `yaml:"driver" env:"DB_DRIVER" env-default:"mariadb"`
+	Host       string `yaml:"host" env:"DB_HOST" env-default:"localhost"`
+	Port       int    `yaml:"port" env:"DB_PORT" env-required:"true"`
+	UsernameDB string `yaml:"username-db" env:"DB_USERNAME" env-required:"true"`
+	Password   string `yaml:"password" env:"DB_PASSWORD"`
+	DBName     string `yaml:"dbname" env:"DB_NAME" env-default:"sso"`
+}
+
+type Config struct {
+	// ... остальное ...
+	DefaultSecret string `env:"DEFAULT_SECRET" env-required:"true"` // yaml tag убран
+}
 ```
 
-Убрать `yaml:"default_secret"`. Теперь это **только env**.
+Строго говоря — `DefaultSecret` больше не читается из YAML.
 
-- [ ] **Step 4.2: local.yaml — удалить строку**
+- [ ] **Step 4.3: .env loader в main**
 
-В `config/local.yaml` удалить `default_secret: ...`. Добавить комментарий в начале файла:
+`cmd/sso/main.go` — в самом начале `main()`:
+
+```go
+import "github.com/joho/godotenv"
+
+func main() {
+	// Load .env if present (silent on absence — .env is dev convenience only).
+	_ = godotenv.Load()
+
+	cfg := config.MustLoad()
+	// ... existing code ...
+}
+```
+
+**Policy:** `.env` load делаем BEST-EFFORT — если файла нет, работаем дальше. В prod `.env` может отсутствовать, секреты придут через systemd env / k8s secrets / etc.
+
+- [ ] **Step 4.4: local.yaml + .env.example**
+
+Очистить `config/local.yaml` от секретов:
 
 ```yaml
-# DEFAULT_SECRET is loaded from environment variable only.
-# For local dev, export it: DEFAULT_SECRET=dev-only-secret go run ./cmd/sso --config=./config/local.yaml
+# Secrets are loaded from environment variables (or .env file).
+# See .env.example for the full list.
+env: local
+token_ttl: 1h
+refresh_ttl: 720h
+grpc:
+  port: 44044
+  timeout: 5s
+metrics:
+  port: 9090
+v1_sunset_date: ""  # ISO-8601; empty = no sunset
+database:
+  driver: mariadb
+  host: localhost
+  port: 3306
+  dbname: sso
 ```
 
-То же для DB password — оставить только env-source (уже так, `env:"PASSWORD"`).
+Create `.env.example` в корне репо:
 
-- [ ] **Step 4.3: обновить README/DEV docs**
+```bash
+# Copy to .env for local development. Never commit .env.
 
-В `README.md` (если есть) или создать `docs/DEV.md`:
+# Database
+DB_DRIVER=mariadb           # mariadb | sqlite | postgres (when implemented)
+DB_USERNAME=sso
+DB_PASSWORD=changeme
+
+# JWT fallback secret — if app has no own Secret, this is used.
+# Rotate in production.
+DEFAULT_SECRET=dev-only-change-me
+
+# Bootstrap (optional): email of the user promoted to system-admin on migration.
+# BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+```
+
+Добавить `.env` в `.gitignore` (проверь что его ещё нет):
+```bash
+echo ".env" >> .gitignore
+```
+
+- [ ] **Step 4.5: README / docs/DEV.md**
+
+Create `docs/DEV.md`:
 
 ```markdown
 # Dev setup
 
-Required env vars:
-- `DEFAULT_SECRET` — fallback JWT signing key for apps without own secret
-- `PASSWORD` — MariaDB password
-- `BOOTSTRAP_ADMIN_EMAIL` (optional) — email of user to promote to system-admin on migration
-- `CONFIG_PATH` (or --config flag) — path to YAML config
+## Prerequisites
+- Go 1.24+
+- MariaDB 11+ running locally (or SQLite for tests — no setup needed)
 
-Example:
+## Configuration
+
+Config comes from three sources, in priority order:
+
+1. **Env vars** (highest) — including those loaded from `.env`
+2. **YAML file** at `CONFIG_PATH` or `--config=...`
+3. **Defaults** in struct tags
+
+Secrets (`DB_PASSWORD`, `DEFAULT_SECRET`) are **env-only** — never commit them.
+
+### Quick start
+
 ```bash
-DEFAULT_SECRET=dev-secret PASSWORD=dev-password \
-  go run ./cmd/sso --config=./config/local.yaml
+cp .env.example .env
+# Edit .env with your values
+go run ./cmd/sso --config=./config/local.yaml
 ```
+
+## Env vars
+
+See `.env.example` for the authoritative list with descriptions.
 ```
 
-- [ ] **Step 4.4: сборка + тесты + commit**
+- [ ] **Step 4.6: Тесты**
 
-`go test` упадёт на `MustLoadByPath` если переменная `DEFAULT_SECRET` не выставлена в окружении теста. Решение: testutil выставляет fake env-переменные перед вызовом config в тестах, либо тесты не дергают `config.Load` (они и не должны — они создают сервисы напрямую).
+Тесты Stage 0 не трогают `config.MustLoad` — они собирают сервисы напрямую. Проверь:
 
-Проверь: `grep -rn "config.MustLoad" --include="*_test.go"` — если пусто, тесты не затронуты.
+```bash
+grep -rn "config.MustLoad\|config.MustLoadByPath" --include="*_test.go"
+```
+
+Expected: пусто. Если нет — тесты не затронуты.
 
 ```bash
 go build ./... && go test ./...
-git add internal/config/ config/ docs/
-git commit -m "feat(config): require secrets via env vars only"
+```
+
+- [ ] **Step 4.7: Commit**
+
+```bash
+git add go.mod go.sum internal/config/ config/ cmd/sso/main.go .env.example .gitignore docs/
+git commit -m "feat(config): env-only secrets, .env support, driver selector"
 ```
 
 ---
@@ -391,8 +488,10 @@ git commit -m "feat(config): require secrets via env vars only"
 - `/metrics` endpoint отдаёт Prometheus-метрики на `METRICS_PORT` (default 9090)
 - `/healthz` возвращает 200
 - RPM Login/Register rate-limit работает по IP
-- `DEFAULT_SECRET` читается только из env
+- `DEFAULT_SECRET`, `DB_PASSWORD` — только из env
+- `.env` загружается в `main` (best-effort), есть `.env.example` и `.env` в `.gitignore`
+- Новое поле `Database.Driver` читается из env/yaml с default `mariadb` (подготовка к Stage 7)
 - Health HTTP-сервер корректно останавливается в graceful shutdown
 - Все тесты зелёные
 
-**После Stage 6** — v2-миграция технически завершена. Stage 7 (drop GORM) — уже не про миграцию, а про снижение зависимостей.
+**После Stage 6** — v2-миграция функционально завершена. Stage 7 = архитектурный рефакторинг (multi-backend storage + drop GORM).

@@ -600,13 +600,13 @@ git commit -m "feat(grpc): register v2 services alongside v1 (dual-serve)"
 
 ---
 
-## Task 8: End-to-end integration tests для v2
+## Task 8: End-to-end v2 тесты через bufconn + fakes
 
-**Files:** `internal/transport/grpc/v2/v2_integration_test.go`
+**Files:** `internal/transport/grpc/v2/v2_test.go`
 
-- [ ] **Step 8.1: Тесты happy path + key errors**
+**Стратегия:** in-process gRPC сервер через `bufconn` (stdlib gRPC facility, никаких сетей). Storage — in-memory SQLite через `testutil.NewTestStorage` (из Stage 0). Никакого Docker, реальный SQL.
 
-Создать in-process gRPC server через `bufconn`, подключить dial, вызвать v2-методы:
+- [ ] **Step 8.1: Тесты**
 
 ```go
 package v2_test
@@ -633,9 +633,16 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func startV2Server(t *testing.T) (ssov2.AuthClient, ssov2.UserClient, ssov2.AppClient, func()) {
+type v2Clients struct {
+	auth ssov2.AuthClient
+	user ssov2.UserClient
+	app  ssov2.AppClient
+	appR *repositories.AppRepo // для прямого seed'инга
+}
+
+func startV2Server(t *testing.T) (*v2Clients, func()) {
 	t.Helper()
-	storage, cleanupStorage := testutil.NewTestStorage(t)
+	storage := testutil.NewTestStorage(t) // in-memory SQLite с AutoMigrate
 
 	userR := repositories.NewUserRepo(storage)
 	appR := repositories.NewAppRepo(storage)
@@ -664,35 +671,53 @@ func startV2Server(t *testing.T) (ssov2.AuthClient, ssov2.UserClient, ssov2.AppC
 	)
 	require.NoError(t, err)
 
-	cleanup := func() {
-		_ = conn.Close()
-		s.Stop()
-		cleanupStorage()
-	}
-	return ssov2.NewAuthClient(conn), ssov2.NewUserClient(conn), ssov2.NewAppClient(conn), cleanup
+	cleanup := func() { _ = conn.Close(); s.Stop() }
+	return &v2Clients{
+		auth: ssov2.NewAuthClient(conn),
+		user: ssov2.NewUserClient(conn),
+		app:  ssov2.NewAppClient(conn),
+		appR: appR,
+	}, cleanup
 }
 
-func seedApp(t *testing.T, appS *services.AppService) uint32 {
-	// вспомогательная функция — пропускай если не нужно
-	return 0
+func (c *v2Clients) seedApp(t *testing.T) uint32 {
+	t.Helper()
+	id, err := c.appR.CreateApp(context.Background(), &models.App{
+		Name: "t", Secret: "s", Link: "https://e.com", IsEnabled: true,
+	})
+	require.NoError(t, err)
+	return id
 }
 
 func TestV2_RegisterLogin_HappyPath(t *testing.T) {
-	auth, _, _, cleanup := startV2Server(t)
+	c, cleanup := startV2Server(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	// предполагается что AppService.Create не входит в v2 клиента в тесте —
-	// используй репозиторий напрямую или вызови через AppClient
-	// (упрощённая версия оставлена агенту)
+	appID := c.seedApp(t)
+
+	regResp, err := c.auth.Register(ctx, &ssov2.RegisterRequest{
+		Email: "alice@example.com", Password: "correcthorse",
+		SteamUrl: "https://s.com/id/a", PathToPhoto: "a.png",
+	})
+	require.NoError(t, err)
+	require.NotZero(t, regResp.GetUserId())
+
+	loginResp, err := c.auth.Login(ctx, &ssov2.LoginRequest{
+		Email: "alice@example.com", Password: "correcthorse", AppId: appID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, loginResp.GetAccessToken())
+	require.NotEmpty(t, loginResp.GetRefreshToken())
 }
 
 func TestV2_Login_UnknownUser_ReturnsInvalidCredentialsWithErrorInfo(t *testing.T) {
-	auth, _, _, cleanup := startV2Server(t)
+	c, cleanup := startV2Server(t)
 	defer cleanup()
+	appID := c.seedApp(t)
 
-	_, err := auth.Login(context.Background(), &ssov2.LoginRequest{
-		Email: "nobody@example.com", Password: "whatever", AppId: 1,
+	_, err := c.auth.Login(context.Background(), &ssov2.LoginRequest{
+		Email: "nobody@example.com", Password: "whatever", AppId: appID,
 	})
 	require.Error(t, err)
 
@@ -708,21 +733,49 @@ func TestV2_Login_UnknownUser_ReturnsInvalidCredentialsWithErrorInfo(t *testing.
 	}
 	require.Equal(t, "INVALID_CREDENTIALS", foundReason)
 }
+
+func TestV2_ChangePassword_HappyPath(t *testing.T) {
+	c, cleanup := startV2Server(t)
+	defer cleanup()
+	ctx := context.Background()
+	appID := c.seedApp(t)
+
+	reg, err := c.auth.Register(ctx, &ssov2.RegisterRequest{
+		Email: "grace@example.com", Password: "oldpass12",
+		SteamUrl: "https://s.com", PathToPhoto: "p.png",
+	})
+	require.NoError(t, err)
+
+	_, err = c.user.ChangePassword(ctx, &ssov2.ChangePasswordRequest{
+		UserId: reg.GetUserId(), OldPassword: "oldpass12", NewPassword: "newpass34",
+	})
+	require.NoError(t, err)
+
+	// Старый пароль больше не работает
+	_, err = c.auth.Login(ctx, &ssov2.LoginRequest{
+		Email: "grace@example.com", Password: "oldpass12", AppId: appID,
+	})
+	require.Error(t, err)
+
+	// Новый работает
+	_, err = c.auth.Login(ctx, &ssov2.LoginRequest{
+		Email: "grace@example.com", Password: "newpass34", AppId: appID,
+	})
+	require.NoError(t, err)
+}
 ```
 
-**Замечание агенту:** в `TestV2_RegisterLogin_HappyPath` оставлена заготовка. Раскрой её: создай app через `AppClient.CreateApp`, register через `AuthClient.Register`, login через `AuthClient.Login`, проверь непустые токены. Используй как шаблон такой тест из `auth_integration_test.go` (Stage 0 / 3), но поверх gRPC-клиента.
-
-- [ ] **Step 8.2: Запуск**
+- [ ] **Step 8.2: Прогон**
 ```bash
 go test ./internal/transport/grpc/v2/ -v -count=1
 ```
-Expected: PASS. Если Docker недоступен — STOP с сообщением.
+Expected: PASS. Всё in-process, занимает миллисекунды.
 
 - [ ] **Step 8.3: Commit**
 
 ```bash
-git add internal/transport/grpc/v2/v2_integration_test.go
-git commit -m "test(v2): end-to-end gRPC integration via bufconn"
+git add internal/transport/grpc/v2/v2_test.go
+git commit -m "test(v2): in-process gRPC tests via bufconn + fake repositories"
 ```
 
 ---

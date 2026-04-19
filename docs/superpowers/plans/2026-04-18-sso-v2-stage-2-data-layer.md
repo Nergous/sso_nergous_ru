@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Precondition: Stage 1 merged to main.
 
-**Goal:** Подготовить модели и репозитории к v2 API: timestamps на `User`, fix composite key на `Admin`, индексы на FK, пагинация в List-методах. Ввести явные миграции через `goose`.
+**Goal:** Подготовить модели и репозитории к v2 API: timestamps на `User`, fix composite key на `Admin`, индексы на FK, пагинация в List-методах.
 
-**Architecture:** AutoMigrate остаётся параллельно с goose-миграциями в dev-конфиге (для testcontainers). В prod — только goose. Пагинация — простая offset-based с курсором в виде base64(offset:anchor_id) для будущего перехода на keyset. **Интерфейс репозитория** меняется — нужна обратная совместимость со Stage 1 сервисами (v1-контроллеры пока не знают про пагинацию, вызывают с `page_size=0, page_token=""` → возвращается весь список до 1000 записей).
+**Architecture:** Schema-изменения остаются через GORM-теги + AutoMigrate (чистую миграционную систему вводим в Stage 7 вместе с переездом на multi-backend storage). Пагинация — offset-based opaque cursor. **Интерфейс репозитория** (уже введён в Stage 0) расширяется новыми параметрами pageSize/pageToken в List-методах. v1-контроллеры вызывают с `(0, "")` — прозрачно для старого API.
 
 **Tech Stack:** `github.com/pressly/goose/v3`, GORM.
 
@@ -358,171 +358,6 @@ git commit -m "feat(data): paginate list operations end-to-end"
 
 ---
 
-## Task 6: Goose migrations
-
-- [ ] **Step 6.1: Зависимость**
-
-```bash
-go get github.com/pressly/goose/v3@latest
-go mod tidy
-```
-
-- [ ] **Step 6.2: migrations/00001_init.sql**
-
-```sql
--- +goose Up
-CREATE TABLE IF NOT EXISTS users (
-    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-    email VARCHAR(255) NOT NULL,
-    pass_hash VARCHAR(255) NOT NULL,
-    steam_url VARCHAR(255),
-    path_to_photo VARCHAR(2048),
-    UNIQUE KEY idx_users_email (email)
-);
-
-CREATE TABLE IF NOT EXISTS apps (
-    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(128) NOT NULL,
-    secret VARCHAR(255) NOT NULL,
-    link VARCHAR(2048) NOT NULL,
-    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at DATETIME,
-    updated_at DATETIME,
-    UNIQUE KEY idx_apps_name (name)
-);
-
-CREATE TABLE IF NOT EXISTS admins (
-    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-    user_id BIGINT UNSIGNED NOT NULL,
-    app_id BIGINT UNSIGNED NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS refresh_tokens (
-    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-    token VARCHAR(255) NOT NULL,
-    user_id BIGINT UNSIGNED NOT NULL,
-    app_id BIGINT UNSIGNED NOT NULL,
-    expires_at DATETIME NOT NULL,
-    UNIQUE KEY idx_refresh_tokens_token (token),
-    CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_refresh_app FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
-);
-
--- +goose Down
-DROP TABLE IF EXISTS refresh_tokens;
-DROP TABLE IF EXISTS admins;
-DROP TABLE IF EXISTS apps;
-DROP TABLE IF EXISTS users;
-```
-
-- [ ] **Step 6.3: migrations/00002_user_timestamps.sql**
-
-```sql
--- +goose Up
-ALTER TABLE users ADD COLUMN created_at DATETIME, ADD COLUMN updated_at DATETIME;
-
--- +goose Down
-ALTER TABLE users DROP COLUMN updated_at, DROP COLUMN created_at;
-```
-
-- [ ] **Step 6.4: migrations/00003_admin_composite_key.sql**
-
-```sql
--- +goose Up
-CREATE UNIQUE INDEX idx_admin_user_app ON admins (user_id, app_id);
-CREATE INDEX idx_admin_user ON admins (user_id);
-CREATE INDEX idx_admin_app ON admins (app_id);
-
--- +goose Down
-DROP INDEX idx_admin_app ON admins;
-DROP INDEX idx_admin_user ON admins;
-DROP INDEX idx_admin_user_app ON admins;
-```
-
-- [ ] **Step 6.5: migrations/00004_refresh_token_indexes.sql**
-
-```sql
--- +goose Up
-CREATE INDEX idx_refresh_user ON refresh_tokens (user_id);
-CREATE INDEX idx_refresh_app ON refresh_tokens (app_id);
-
--- +goose Down
-DROP INDEX idx_refresh_app ON refresh_tokens;
-DROP INDEX idx_refresh_user ON refresh_tokens;
-```
-
-- [ ] **Step 6.6: Обёртка в storage**
-
-Create `internal/storage/mariadb/migrate.go`:
-
-```go
-package mariadb
-
-import (
-	"embed"
-	"fmt"
-
-	"github.com/pressly/goose/v3"
-)
-
-//go:embed migrations/*.sql
-var migrationsFS embed.FS
-
-// RunGooseMigrations applies all pending SQL migrations from the embedded FS.
-func (s *Storage) RunGooseMigrations() error {
-	sqlDB, err := s.DB.DB()
-	if err != nil {
-		return fmt.Errorf("goose: %w", err)
-	}
-	goose.SetBaseFS(migrationsFS)
-	if err := goose.SetDialect("mysql"); err != nil {
-		return fmt.Errorf("goose dialect: %w", err)
-	}
-	return goose.Up(sqlDB, "migrations")
-}
-```
-
-- [ ] **Step 6.7: Переместить миграции в embed-путь**
-
-Migrations должны лежать под `internal/storage/mariadb/migrations/`, чтобы `embed` нашёл. Перенести:
-```bash
-mkdir -p internal/storage/mariadb/migrations
-git mv migrations/*.sql internal/storage/mariadb/migrations/
-rmdir migrations
-```
-
-- [ ] **Step 6.8: Запускать goose в app.New**
-
-Modify `internal/app/app.go` — заменить:
-```go
-if err := storage.Migrate(); err != nil {
-	panic(err)
-}
-```
-на:
-```go
-if err := storage.RunGooseMigrations(); err != nil {
-	panic(err)
-}
-```
-
-(`storage.Migrate()` через AutoMigrate **оставить** определённым — тесты testutil.NewTestStorage продолжат использовать его для свежих контейнеров.)
-
-- [ ] **Step 6.9: Сборка + тесты**
-```bash
-go build ./... && go test ./...
-```
-Expected: PASS. (testutil использует AutoMigrate — goose не прогонится в тестах, это OK.)
-
-- [ ] **Step 6.10: Commit**
-
-```bash
-git add go.mod go.sum internal/storage/mariadb/migrate.go internal/storage/mariadb/migrations/ internal/app/app.go
-git commit -m "feat(storage): run SQL migrations via goose at startup"
-```
-
----
-
 ## Definition of Done Stage 2
 
 - Все тесты зелёные
@@ -532,7 +367,8 @@ git commit -m "feat(storage): run SQL migrations via goose at startup"
 - `App.IsEnabled` default `true`
 - `GetAllUsers`, `GetAllApps`, `GetAllUsersForApp` — с пагинацией (page_size clamp, opaque page_token)
 - v1 API отвечает как раньше (пагинация прозрачна)
-- `goose up` накатывает 4 миграции в embed-FS
 - `repositories.UpdateUser`/`UpdateApp` — single-query UPDATE с RowsAffected-проверкой
+
+**Миграции** остаются на GORM AutoMigrate до Stage 7 — там схема пересобирается как SQL-файлы под multi-backend + goose.
 
 Дальше — Stage 3 (v2 controllers, dual-serve).

@@ -422,7 +422,16 @@ v1-контроллеры тоже теперь идут через AuthIntercep
 
 - [ ] **Step 5.4: Тесты**
 
-Обнови Stage-0/Stage-3 integration-тесты: передавай valid Bearer-token через metadata, заведи тестового sysadmin через прямое `UPDATE users SET is_system_admin = TRUE WHERE id = ?` в БД тестового контейнера (helper в `testutil`).
+Обнови Stage-3 bufconn-тесты: передавай valid Bearer-token через metadata. Промоть тестового пользователя в sysadmin прямым SQL-запросом через тестовый `Storage`:
+
+```go
+err := storage.DB.Exec("UPDATE users SET is_system_admin = ? WHERE id = ?", true, userID).Error
+require.NoError(t, err)
+```
+
+Helper `testutil.PromoteToSystemAdmin(t, storage, userID)` — добавь в `internal/testutil/sqlite.go` для удобства.
+
+Stage-0 integration-тесты AuthService не затронуты — там нет gRPC слоя, а значит и интерцептора.
 
 Добавь тесты на ErrPermissionDenied:
 - `UpdateUser` чужого id обычным юзером → PERMISSION_DENIED

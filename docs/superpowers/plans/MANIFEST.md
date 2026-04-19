@@ -17,10 +17,11 @@
 - [ ] **stage-4** — [2026-04-18-sso-v2-stage-4-authz.md](2026-04-18-sso-v2-stage-4-authz.md) — authz, system-admin
 - [ ] **stage-5** — [2026-04-18-sso-v2-stage-5-deprecation.md](2026-04-18-sso-v2-stage-5-deprecation.md) — v1 deprecation infra
 - [ ] **stage-6** — [2026-04-18-sso-v2-stage-6-hardening.md](2026-04-18-sso-v2-stage-6-hardening.md) — metrics, rate limit, secrets
-- [ ] **stage-7** — [2026-04-18-sso-v2-stage-7-drop-gorm.md](2026-04-18-sso-v2-stage-7-drop-gorm.md) — replace GORM with database/sql
+- [ ] **stage-7** — [2026-04-18-sso-v2-stage-7-drop-gorm.md](2026-04-18-sso-v2-stage-7-drop-gorm.md) — multi-backend storage (MariaDB + SQLite) + drop GORM
 
 ## Human notes
 
 - Stage 4 содержит policy assumptions в начале файла — прочитать до первой ночи, которая до него дойдёт.
-- Stage 7 идёт последним намеренно — дешевле делать на стабилизированной кодовой базе.
+- Stage 7 идёт последним намеренно — дешевле делать на стабилизированной кодовой базе с покрытием.
 - Stage 5 НЕ выполняет реальный cutover клиентов — только готовит инфраструктуру. Фактическое удаление v1 — ручной шаг из `docs/CUTOVER.md` позже.
+- Тесты не требуют Docker: Stage 0 вводит in-memory SQLite через `glebarez/sqlite` (GORM-driver, pure-Go, без CGO). Stage 7 мигрирует helper на raw `modernc.org/sqlite` — тесты сервисов не меняются. Всё гоняется в эфемерной VM scheduled агента.

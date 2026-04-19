@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Починить блокирующие баги, убрать антипаттерны, завести integration-тесты — подготовить кодовую базу к безопасной миграции на v2.
+**Goal:** Починить блокирующие баги, убрать антипаттерны, завести integration-тесты сервисного слоя на in-memory SQLite — подготовить кодовую базу к безопасной миграции на v2.
 
-**Architecture:** Работаем на ветке `stage-0-stabilization`. Каждая задача — отдельный коммит. Никаких изменений API v1 — только internal refactor + тесты. После завершения Stage 0 — `go build ./... && go test ./...` зелёные, поведение v1 RPC не изменилось.
+**Architecture:** Работаем на ветке `stage-0-stabilization`. Каждая задача — отдельный коммит. Никаких изменений API v1 — только internal refactor + тесты. После завершения Stage 0 — `go build ./... && go test ./...` зелёные, поведение v1 RPC не изменилось. **Тесты НЕ требуют Docker** — in-memory SQLite через pure-Go драйвер (`glebarez/sqlite` поверх `modernc.org/sqlite`). Реальный SQL, никаких контейнеров.
 
-**Tech Stack:** Go 1.24, testify, testcontainers-go, MariaDB 11, grpc-go, GORM, slog.
+**Tech Stack:** Go 1.24, testify, grpc-go, GORM, `github.com/glebarez/sqlite` (CGO-free SQLite для GORM), slog.
 
 ---
 
@@ -30,8 +30,10 @@
 **Создаётся:**
 - `internal/transport/grpc/interceptors/timeout.go` — общий timeout-interceptor
 - `internal/transport/grpc/interceptors/timeout_test.go` — unit-тест на interceptor
-- `internal/services/auth_integration_test.go` — integration-тесты на AuthService
-- `internal/testutil/db.go` — helper для подъёма testcontainers MariaDB
+- `internal/repositories/iface.go` — интерфейсы UserRepository/AppRepository/TokenRepository (нужны Stage 7)
+- `internal/testutil/sqlite.go` — helper создаёт GORM+SQLite in-memory Storage с AutoMigrate
+- `internal/testutil/logger.go` — silent slog для тестов
+- `internal/services/auth_test.go` — integration-тесты сервиса через реальные репо + SQLite
 
 **Модифицируется (mechanical refactor `*context.Context` → `context.Context`):**
 - `internal/services/{auth,user,app}.go`
@@ -608,92 +610,191 @@ git commit -m "feat(shutdown): close storage on graceful shutdown"
 
 ---
 
-## Task 8: Integration-тесты для AuthService
+## Task 8: Integration-тесты AuthService через in-memory SQLite
 
 **Files:**
-- Create: `internal/testutil/db.go`
-- Create: `internal/services/auth_integration_test.go`
+- Create: `internal/repositories/iface.go` — интерфейсы репо (нужны Stage 7 для multi-backend)
+- Create: `internal/testutil/sqlite.go` — helper для in-memory Storage
+- Create: `internal/testutil/logger.go`
+- Create: `internal/services/auth_test.go`
+- Modify: `internal/services/auth.go` и `user.go`, `app.go` — принимать интерфейсы вместо `*UserRepo` / `*AppRepo` / `*TokenRepo`
 
-**Контекст:** это единственный этап Stage 0, который требует внешних зависимостей. `testcontainers-go` поднимает MariaDB в Docker, прогоняет `Migrate`, затем тесты работают с реальной БД. **Предусловие:** на машине агента установлен и запущен Docker.
+**Стратегия:** in-memory SQLite через `github.com/glebarez/sqlite` (pure-Go SQLite-драйвер для GORM, без CGO). Тесты работают с реальными репозиториями поверх реальной БД — ловят баги всей цепочки от сервиса до SQL. Никакого Docker, никаких контейнеров. Каждый тест получает свежий `:memory:` инстанс через `GORM.Open(sqlite.Open(":memory:"))`.
 
-- [ ] **Step 8.1: Добавить зависимости**
+В Stage 7 этот helper переедет с `glebarez/sqlite` (GORM) на `modernc.org/sqlite` (raw database/sql), но **тесты сервисов не изменятся** — они используют только interface абстракции.
 
-```bash
-go get github.com/testcontainers/testcontainers-go@latest
-go get github.com/testcontainers/testcontainers-go/modules/mariadb@latest
-go get github.com/stretchr/testify@latest
-go mod tidy
+- [ ] **Step 8.1: Определить интерфейсы репо**
+
+Create `internal/repositories/iface.go`:
+
+```go
+package repositories
+
+import (
+	"context"
+
+	"sso/internal/models"
+)
+
+// UserRepository — абстракция над хранением пользователей.
+// Конкретная реализация — *UserRepo (GORM). Тесты подставляют fakes.
+type UserRepository interface {
+	GetUserByEmail(ctx context.Context, email string) (models.User, error)
+	GetUserByID(ctx context.Context, id uint32) (models.User, error)
+	GetAllUsers(ctx context.Context) ([]models.User, error)
+	CreateUser(ctx context.Context, user *models.User) (uint32, error)
+	UpdateUser(ctx context.Context, user models.User) error
+	DeleteUser(ctx context.Context, id uint32) error
+}
+
+type AppRepository interface {
+	GetAppByID(ctx context.Context, id uint32) (models.App, error)
+	GetAllApps(ctx context.Context) ([]models.App, error)
+	CreateApp(ctx context.Context, app *models.App) (uint32, error)
+	UpdateApp(ctx context.Context, app models.App) error
+	DeleteApp(ctx context.Context, id uint32) error
+	ChangeStatusApp(ctx context.Context, id uint32) error
+	IsAdmin(ctx context.Context, userID, appID uint32) (bool, error)
+	AddAdmin(ctx context.Context, userID, appID uint32) error
+	RemoveAdmin(ctx context.Context, userID, appID uint32) error
+	GetAllUsersForApp(ctx context.Context, appID uint32) ([]models.User, error)
+}
+
+type TokenRepository interface {
+	CreateRefreshToken(ctx context.Context, token *models.RefreshToken) (uint32, error)
+	GetRefreshToken(ctx context.Context, token string) (models.RefreshToken, error)
+	DeleteRefreshToken(ctx context.Context, token string) error
+	DeleteRefreshTokenByIDs(ctx context.Context, userID, appID uint32) error
+	GetUserByRefreshToken(ctx context.Context, token string) (models.User, error)
+}
 ```
 
-- [ ] **Step 8.2: Создать testutil helper**
+**Compile-time проверки:** в конец соответствующих файлов репозиториев добавить:
+```go
+// internal/repositories/user.go:
+var _ UserRepository = (*UserRepo)(nil)
+// internal/repositories/app.go:
+var _ AppRepository = (*AppRepo)(nil)
+// internal/repositories/token.go:
+var _ TokenRepository = (*TokenRepo)(nil)
+```
 
-Create `internal/testutil/db.go`:
+Если интерфейс расходится с реальными сигнатурами — компилятор скажет сразу. Корректируй интерфейс под существующие методы.
+
+- [ ] **Step 8.2: Сервисы принимают интерфейсы**
+
+Modify `internal/services/auth.go` — изменить поля и конструктор:
+
+```go
+type AuthService struct {
+	log        *slog.Logger
+	storage    *mariadb.Storage
+	tokenTTL   time.Duration
+	refreshTTL time.Duration
+	userR      repositories.UserRepository
+	appR       repositories.AppRepository
+	tokenR     repositories.TokenRepository
+}
+
+func NewAuthService(
+	log *slog.Logger,
+	storage *mariadb.Storage,
+	tokenTTL, refreshTTL time.Duration,
+	userR repositories.UserRepository,
+	appR repositories.AppRepository,
+	tokenR repositories.TokenRepository,
+) *AuthService {
+	return &AuthService{log, storage, tokenTTL, refreshTTL, userR, appR, tokenR}
+}
+```
+
+Аналогично для `UserService` (принимает `UserRepository`) и `AppService` (принимает `AppRepository`).
+
+Callers (`internal/app/app.go`) компилятор не заметит — конкретный `*UserRepo` удовлетворяет интерфейсу.
+
+- [ ] **Step 8.3: SQLite testutil helper**
+
+Create `internal/testutil/sqlite.go`:
+
+```go
+// Package testutil provides test-only helpers. Zero external dependencies —
+// tests must run in any environment (no Docker, no network).
+package testutil
+
+import (
+	"testing"
+
+	"sso/internal/models"
+	"sso/internal/storage/mariadb"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+// NewTestStorage returns a fresh in-memory SQLite Storage with all tables
+// migrated via GORM AutoMigrate. Uses pure-Go glebarez/sqlite — no CGO, no
+// Docker. Each call yields an isolated DB.
+//
+// After Stage 7 (multi-backend refactor) this helper will be replaced with
+// sqlite.New(":memory:") from internal/storage/sqlite. Test bodies don't
+// need to change — they depend only on repository interfaces.
+func NewTestStorage(t *testing.T) *mariadb.Storage {
+	t.Helper()
+
+	// SQLite :memory: DB — each Open gives a fresh one.
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("gorm open sqlite: %v", err)
+	}
+
+	if err := db.AutoMigrate(&models.User{}, &models.App{}, &models.RefreshToken{}, &models.Admin{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+
+	// Auto-close DB when test finishes.
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	return &mariadb.Storage{DB: db}
+}
+```
+
+**Важно:** `mariadb.Storage{DB: ...}` с публичным полем `DB` — проверь текущую структуру [internal/storage/mariadb/mariadb.go](internal/storage/mariadb/mariadb.go#L13). Если поле `DB` уже публичное (по коду — да, `DB *gorm.DB`) — используй так. Если приватное — сделай публичным, это разовая правка ради тестов.
+
+- [ ] **Step 8.4: testutil logger**
+
+Create `internal/testutil/logger.go`:
 
 ```go
 package testutil
 
 import (
-	"context"
-	"testing"
-	"time"
-
-	"sso/internal/storage/mariadb"
-
-	"github.com/testcontainers/testcontainers-go/modules/mariadb"
+	"io"
+	"log/slog"
 )
 
-// NewTestStorage spins up a MariaDB testcontainer, runs migrations, and
-// returns a ready Storage plus a cleanup closure. Fails the test if Docker
-// is unavailable or migrations fail.
-func NewTestStorage(t *testing.T) (*mariadb_storage.Storage, func()) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	container, err := mariadb.Run(ctx,
-		"mariadb:11",
-		mariadb.WithDatabase("ssotest"),
-		mariadb.WithUsername("sso"),
-		mariadb.WithPassword("sso"),
-	)
-	if err != nil {
-		t.Fatalf("failed to start mariadb container: %v", err)
-	}
-
-	dsn, err := container.ConnectionString(ctx, "parseTime=true")
-	if err != nil {
-		_ = container.Terminate(ctx)
-		t.Fatalf("failed to get dsn: %v", err)
-	}
-
-	storage, err := mariadb_storage.NewStorage(dsn)
-	if err != nil {
-		_ = container.Terminate(ctx)
-		t.Fatalf("failed to open storage: %v", err)
-	}
-
-	if err := storage.Migrate(); err != nil {
-		_ = container.Terminate(ctx)
-		t.Fatalf("failed to migrate: %v", err)
-	}
-
-	cleanup := func() {
-		_ = storage.Close()
-		termCtx, termCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer termCancel()
-		_ = container.Terminate(termCtx)
-	}
-
-	return storage, cleanup
+func NewTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 ```
 
-**Важно:** пакет `sso/internal/storage/mariadb` и testcontainers `mariadb`-модуль имеют одинаковое имя пакета. В импортах использован алиас `mariadb_storage` для первого — обеспечь, что имя алиаса совпадает с использованием в коде выше.
+- [ ] **Step 8.5: Зависимости**
 
-- [ ] **Step 8.3: Написать failing integration-тест для Login happy path**
+```bash
+go get github.com/stretchr/testify@latest
+go get github.com/glebarez/sqlite@latest
+go mod tidy
+```
 
-Create `internal/services/auth_integration_test.go`:
+- [ ] **Step 8.6: Integration-тесты AuthService**
+
+Create `internal/services/auth_test.go`:
 
 ```go
 package services_test
@@ -711,214 +812,165 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newAuthTestSuite(t *testing.T) (*services.AuthService, *repositories.UserRepo, *repositories.AppRepo, func()) {
+type testSuite struct {
+	svc    *services.AuthService
+	userR  *repositories.UserRepo
+	appR   *repositories.AppRepo
+	tokenR *repositories.TokenRepo
+}
+
+func newSuite(t *testing.T, refreshTTL time.Duration) *testSuite {
 	t.Helper()
-	storage, cleanup := testutil.NewTestStorage(t)
+	storage := testutil.NewTestStorage(t) // in-memory SQLite с AutoMigrate
 
 	userR := repositories.NewUserRepo(storage)
 	appR := repositories.NewAppRepo(storage)
 	tokenR := repositories.NewTokenRepo(storage)
 
 	log := testutil.NewTestLogger()
-	svc := services.NewAuthService(log, storage, time.Minute, time.Hour, userR, appR, tokenR)
+	svc := services.NewAuthService(log, storage, time.Minute, refreshTTL, userR, appR, tokenR)
+	return &testSuite{svc, userR, appR, tokenR}
+}
 
-	return svc, userR, appR, cleanup
+func (s *testSuite) seedApp(t *testing.T) uint32 {
+	t.Helper()
+	id, err := s.appR.CreateApp(context.Background(), &models.App{
+		Name: "test-app", Secret: "super-secret", Link: "https://example.com", IsEnabled: true,
+	})
+	require.NoError(t, err)
+	return id
 }
 
 func TestAuthService_RegisterThenLogin_HappyPath(t *testing.T) {
-	svc, _, appR, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
+	s := newSuite(t, time.Hour)
 	ctx := context.Background()
+	appID := s.seedApp(t)
 
-	// seed an app
-	appID, err := appR.CreateApp(ctx, &models.App{
-		Name:   "test-app",
-		Secret: "super-secret",
-		Link:   "https://example.com",
-	})
+	uid, err := s.svc.RegisterNewUser(ctx, "alice@example.com", "correcthorse", "https://s.com/id/a", "a.png")
 	require.NoError(t, err)
+	require.NotZero(t, uid)
 
-	userID, err := svc.RegisterNewUser(ctx, "alice@example.com", "correcthorse", "https://steamcommunity.com/id/alice", "alice.png")
+	access, refresh, err := s.svc.Login(ctx, "alice@example.com", "correcthorse", appID)
 	require.NoError(t, err)
-	require.NotZero(t, userID)
-
-	accessToken, refreshToken, err := svc.Login(ctx, "alice@example.com", "correcthorse", appID)
-	require.NoError(t, err)
-	require.NotEmpty(t, accessToken)
-	require.NotEmpty(t, refreshToken)
+	require.NotEmpty(t, access)
+	require.NotEmpty(t, refresh)
 }
 
 func TestAuthService_Login_WrongPassword_ReturnsInvalidCredentials(t *testing.T) {
-	svc, _, appR, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
+	s := newSuite(t, time.Hour)
 	ctx := context.Background()
-
-	appID, err := appR.CreateApp(ctx, &models.App{Name: "t", Secret: "s", Link: "https://e.com"})
+	appID := s.seedApp(t)
+	_, err := s.svc.RegisterNewUser(ctx, "bob@example.com", "rightpass", "https://s.com", "p.png")
 	require.NoError(t, err)
 
-	_, err = svc.RegisterNewUser(ctx, "bob@example.com", "rightpass", "https://s.com", "p.png")
-	require.NoError(t, err)
-
-	_, _, err = svc.Login(ctx, "bob@example.com", "wrongpass", appID)
+	_, _, err = s.svc.Login(ctx, "bob@example.com", "wrongpass", appID)
 	require.ErrorIs(t, err, services.ErrInvalidCredentials)
 }
 
 func TestAuthService_Login_UnknownEmail_ReturnsInvalidCredentials(t *testing.T) {
-	svc, _, appR, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	appID, err := appR.CreateApp(ctx, &models.App{Name: "t", Secret: "s", Link: "https://e.com"})
-	require.NoError(t, err)
-
-	_, _, err = svc.Login(ctx, "ghost@example.com", "whatever", appID)
+	s := newSuite(t, time.Hour)
+	appID := s.seedApp(t)
+	_, _, err := s.svc.Login(context.Background(), "ghost@example.com", "whatever", appID)
 	require.ErrorIs(t, err, services.ErrInvalidCredentials)
 }
 
 func TestAuthService_Refresh_HappyPath(t *testing.T) {
-	svc, _, appR, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
+	s := newSuite(t, time.Hour)
 	ctx := context.Background()
-	appID, err := appR.CreateApp(ctx, &models.App{Name: "t", Secret: "s", Link: "https://e.com"})
+	appID := s.seedApp(t)
+	_, err := s.svc.RegisterNewUser(ctx, "carol@example.com", "pw123456", "https://s.com", "p.png")
+	require.NoError(t, err)
+	_, refresh, err := s.svc.Login(ctx, "carol@example.com", "pw123456", appID)
 	require.NoError(t, err)
 
-	_, err = svc.RegisterNewUser(ctx, "carol@example.com", "pw123456", "https://s.com", "p.png")
+	access2, refresh2, err := s.svc.Refresh(ctx, refresh)
 	require.NoError(t, err)
-
-	_, refreshToken, err := svc.Login(ctx, "carol@example.com", "pw123456", appID)
-	require.NoError(t, err)
-
-	newAccess, newRefresh, err := svc.Refresh(ctx, refreshToken)
-	require.NoError(t, err)
-	require.NotEmpty(t, newAccess)
-	require.NotEmpty(t, newRefresh)
-	require.NotEqual(t, refreshToken, newRefresh)
+	require.NotEmpty(t, access2)
+	require.NotEqual(t, refresh, refresh2)
 }
 
 func TestAuthService_Refresh_ExpiredToken_ReturnsErrTokenExpired(t *testing.T) {
-	// Use a 1ns refresh TTL so the token is born expired.
-	storage, cleanup := testutil.NewTestStorage(t)
-	defer cleanup()
-
-	userR := repositories.NewUserRepo(storage)
-	appR := repositories.NewAppRepo(storage)
-	tokenR := repositories.NewTokenRepo(storage)
-	log := testutil.NewTestLogger()
-	svc := services.NewAuthService(log, storage, time.Minute, time.Nanosecond, userR, appR, tokenR)
-
+	s := newSuite(t, time.Nanosecond) // born expired
 	ctx := context.Background()
-	appID, err := appR.CreateApp(ctx, &models.App{Name: "t", Secret: "s", Link: "https://e.com"})
+	appID := s.seedApp(t)
+	_, err := s.svc.RegisterNewUser(ctx, "dave@example.com", "pw123456", "https://s.com", "p.png")
 	require.NoError(t, err)
-
-	_, err = svc.RegisterNewUser(ctx, "dave@example.com", "pw123456", "https://s.com", "p.png")
-	require.NoError(t, err)
-
-	_, refreshToken, err := svc.Login(ctx, "dave@example.com", "pw123456", appID)
+	_, refresh, err := s.svc.Login(ctx, "dave@example.com", "pw123456", appID)
 	require.NoError(t, err)
 
 	time.Sleep(5 * time.Millisecond)
 
-	_, _, err = svc.Refresh(ctx, refreshToken)
+	_, _, err = s.svc.Refresh(ctx, refresh)
 	require.ErrorIs(t, err, services.ErrTokenExpired)
 }
 
 func TestAuthService_Logout_DeletesRefreshToken(t *testing.T) {
-	svc, _, appR, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
+	s := newSuite(t, time.Hour)
 	ctx := context.Background()
-	appID, err := appR.CreateApp(ctx, &models.App{Name: "t", Secret: "s", Link: "https://e.com"})
+	appID := s.seedApp(t)
+	_, err := s.svc.RegisterNewUser(ctx, "eve@example.com", "pw123456", "https://s.com", "p.png")
+	require.NoError(t, err)
+	_, refresh, err := s.svc.Login(ctx, "eve@example.com", "pw123456", appID)
 	require.NoError(t, err)
 
-	_, err = svc.RegisterNewUser(ctx, "eve@example.com", "pw123456", "https://s.com", "p.png")
-	require.NoError(t, err)
+	require.NoError(t, s.svc.Logout(ctx, refresh))
 
-	_, refreshToken, err := svc.Login(ctx, "eve@example.com", "pw123456", appID)
-	require.NoError(t, err)
-
-	require.NoError(t, svc.Logout(ctx, refreshToken))
-
-	// Using the refresh token after logout should fail.
-	_, _, err = svc.Refresh(ctx, refreshToken)
+	_, _, err = s.svc.Refresh(ctx, refresh)
 	require.Error(t, err)
 }
 
 func TestAuthService_ValidateToken_HappyPath(t *testing.T) {
-	svc, _, appR, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
+	s := newSuite(t, time.Hour)
 	ctx := context.Background()
-	appID, err := appR.CreateApp(ctx, &models.App{Name: "t", Secret: "s", Link: "https://e.com"})
+	appID := s.seedApp(t)
+	uid, err := s.svc.RegisterNewUser(ctx, "frank@example.com", "pw123456", "https://s.com", "p.png")
+	require.NoError(t, err)
+	access, _, err := s.svc.Login(ctx, "frank@example.com", "pw123456", appID)
 	require.NoError(t, err)
 
-	userID, err := svc.RegisterNewUser(ctx, "frank@example.com", "pw123456", "https://s.com", "p.png")
-	require.NoError(t, err)
-
-	accessToken, _, err := svc.Login(ctx, "frank@example.com", "pw123456", appID)
-	require.NoError(t, err)
-
-	gotUserID, valid, err := svc.ValidateToken(ctx, accessToken)
+	got, valid, err := s.svc.ValidateToken(ctx, access)
 	require.NoError(t, err)
 	require.True(t, valid)
-	require.Equal(t, userID, gotUserID)
+	require.Equal(t, uid, got)
 }
 
 func TestAuthService_ValidateToken_GarbageToken_Errors(t *testing.T) {
-	svc, _, _, cleanup := newAuthTestSuite(t)
-	defer cleanup()
-
-	_, _, err := svc.ValidateToken(context.Background(), "not-a-jwt")
+	s := newSuite(t, time.Hour)
+	_, _, err := s.svc.ValidateToken(context.Background(), "not-a-jwt")
 	require.Error(t, err)
 }
-```
 
-- [ ] **Step 8.4: Добавить test logger helper**
+func TestAuthService_RegisterDuplicateEmail_Fails(t *testing.T) {
+	s := newSuite(t, time.Hour)
+	ctx := context.Background()
 
-Create `internal/testutil/logger.go`:
+	_, err := s.svc.RegisterNewUser(ctx, "dup@example.com", "pw123456", "https://s.com", "p.png")
+	require.NoError(t, err)
 
-```go
-package testutil
-
-import (
-	"io"
-	"log/slog"
-)
-
-// NewTestLogger returns a slog.Logger that discards all output — use in tests
-// so logs don't pollute `go test -v` output.
-func NewTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+	// Повторная регистрация того же email — SQLite должен вернуть duplicate через GORM
+	_, err = s.svc.RegisterNewUser(ctx, "dup@example.com", "otherpw1", "https://s.com", "p2.png")
+	require.Error(t, err, "duplicate email should fail")
 }
 ```
 
-- [ ] **Step 8.5: Запустить тесты**
+- [ ] **Step 8.7: Прогон**
 
 ```bash
 go test ./internal/services/ -v -run TestAuthService -count=1
 ```
 
-Expected: все 8 тестов PASS. Если Docker недоступен — тесты упадут на этапе `testutil.NewTestStorage` с понятной ошибкой.
+Expected: все 9 тестов PASS в десятках миллисекунд. Реальный SQL, никакого Docker.
 
-**Возможные проблемы и их решения:**
-- `failed to start mariadb container: Cannot connect to the Docker daemon` — Docker не запущен. Запустить Docker Desktop / `sudo systemctl start docker`.
-- Импорт `mariadb_storage` vs `mariadb` (testcontainers) конфликтует — использовать явный алиас в `testutil/db.go`:
-  ```go
-  import (
-      ssomariadb "sso/internal/storage/mariadb"
-      tcmariadb "github.com/testcontainers/testcontainers-go/modules/mariadb"
-  )
-  ```
-  и соответственно `*ssomariadb.Storage` / `tcmariadb.Run(...)`. Если ошибка компиляции в Step 8.5 говорит про конфликт имён — применить этот вариант.
+**Возможные проблемы:**
+- **SQLite не имеет `UNSIGNED` типов.** GORM маппит `uint32` на SQLite `INTEGER` — работает. Если на stage 0 где-то жёстко используется `BIGINT UNSIGNED` — тест упадёт на AutoMigrate. Решение: пусть GORM сам разберётся, не указывай типы руками в моделях.
+- **Duplicate detection через GORM** возвращает в ошибке текст `"UNIQUE constraint failed"` на SQLite и `"Error 1062"` на MySQL. Stage 0 пока не маппит их — тест `TestAuthService_RegisterDuplicateEmail_Fails` использует `require.Error` (любая ошибка ок), не `require.ErrorIs`. После Stage 1 ошибка будет типизированной.
+- **FK constraints в SQLite выключены по умолчанию.** `glebarez/sqlite` включает их автоматически через `_pragma=foreign_keys(1)` в DSN. Если не работает — добавь `&_pragma=foreign_keys(1)` к DSN в `testutil/sqlite.go`.
 
-- [ ] **Step 8.6: Commit**
+- [ ] **Step 8.8: Commit**
 
 ```bash
-git add go.mod go.sum internal/testutil/ internal/services/auth_integration_test.go
-git commit -m "test(auth): add integration tests for AuthService via testcontainers"
+git add go.mod go.sum internal/repositories/iface.go internal/repositories/user.go internal/repositories/app.go internal/repositories/token.go internal/testutil/ internal/services/
+git commit -m "test(auth): SQLite-backed integration tests (no Docker required)"
 ```
 
 ---
@@ -967,8 +1019,9 @@ Expected: ~7-9 коммитов с префиксами `fix:`, `refactor:`, `fe
 
 - [x] `go build ./...` — 0 ошибок
 - [x] `go vet ./...` — 0 предупреждений
-- [x] `go test ./...` — все тесты зелёные
-- [x] Все integration-тесты `TestAuthService_*` проходят с реальной MariaDB
+- [x] `go test ./...` — все тесты зелёные (без Docker)
+- [x] Все unit-тесты `TestAuthService_*` проходят в миллисекундах через fakes
+- [x] Репозитории реализуют `UserRepository`/`AppRepository`/`TokenRepository` интерфейсы (compile-time проверено)
 - [x] В коде нет `*context.Context`, `fmt.Println`, `log.Print(dsn)`
 - [x] `grpc.Server` использует единый `TimeoutUnaryInterceptor`
 - [x] `application.Storage.Close()` вызывается в graceful shutdown

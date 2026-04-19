@@ -61,9 +61,9 @@
 - Добавить пагинацию в `GetAllUsers`, `GetAllApps`, `GetAllUsersForApp`:
   - Opaque cursor `base64(last_id:last_created_at)` или простая offset-based с документированным trade-off
   - Clamp `page_size` ∈ [1, 1000], default 50
-- Ввести `goose` для миграций, convert AutoMigrate → явные DDL-миграции, снять AutoMigrate в prod-конфиге
+- Миграции схемы остаются через AutoMigrate (чистую систему миграций вводим в Stage 7 вместе с multi-backend)
 
-**Definition of done:** все репозитории возвращают доменные ошибки из Stage 1, пагинация работает, миграции накатываются через `goose up`.
+**Definition of done:** все репозитории возвращают доменные ошибки из Stage 1, пагинация работает, schema-изменения применяются через AutoMigrate.
 
 ---
 
@@ -106,13 +106,27 @@
 ---
 
 ### Stage 6: Production hardening
-**Plan file:** `2026-04-18-sso-v2-stage-6-hardening.md` (TBD)
+**Plan file:** `2026-04-18-sso-v2-stage-6-hardening.md`
 
-- Prometheus metrics (`grpc_prometheus`)
-- OpenTelemetry tracing (OTLP interceptor)
-- Rate limiting на `Login` (по IP + по email)
-- Секреты из env/secret-manager, удалить `default_secret` из YAML
-- Рассмотреть разделение `SigningKey` и `AppSecret` с `kid` в JWT (breaking change → v3 или backward-compat поле)
+- Prometheus metrics + /metrics HTTP endpoint
+- In-memory rate limiting на `Login` и `Register` (по IP)
+- Секреты из env (или `.env` для dev) — удалить `default_secret` из YAML
+- Добавить `Database.Driver` поле в конфиг — подготовка к Stage 7
+- `.env` loader в `main` (best-effort)
+
+---
+
+### Stage 7: Multi-backend storage + drop GORM
+**Plan file:** `2026-04-18-sso-v2-stage-7-drop-gorm.md`
+
+- `Storage` + `DBProvider` интерфейсы, фабрика `storage.New(cfg)` с dispatch по `cfg.Database.Driver`
+- Полная реализация MariaDB backend на `database/sql` + goose migrations (embedded SQL)
+- Полная реализация SQLite backend (pure-Go, `modernc.org/sqlite`) — для in-memory integration тестов без Docker
+- Postgres — scaffold с `ErrNotImplemented` на будущее
+- Репозитории разносятся в `internal/repositories/{mariadb,sqlite}/`
+- Сервисы продолжают зависеть только от интерфейсов репо (введены в Stage 0) — backend-agnostic
+- Integration-тесты на in-memory SQLite: реальный SQL, никаких контейнеров
+- GORM полностью удалён из `go.mod`
 
 ---
 
