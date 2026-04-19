@@ -4,7 +4,7 @@
 
 ## Стейдж: stage-0 — stabilization
 
-## PR (with [STOPPED] marker): see branch `claude/stage-0-stabilization`
+## PR (with [STOPPED] marker): https://github.com/Nergous/sso_nergous_ru/pull/1
 
 ## Где остановился
 
