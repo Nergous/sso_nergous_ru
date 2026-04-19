@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"context"
-	"fmt"
 
 	"sso/internal/models"
 	"sso/internal/storage/mariadb"
@@ -52,12 +51,9 @@ func (r *UserRepo) CreateUser(
 	ctx *context.Context,
 	user *models.User,
 ) (uint32, error) {
-	rows := r.storage.DB.WithContext(*ctx).Create(&user)
-	if rows.Error != nil {
-		fmt.Println(rows.Error)
-		return 0, rows.Error
+	if err := r.storage.DB.WithContext(*ctx).Create(&user).Error; err != nil {
+		return 0, err
 	}
-
 	return user.ID, nil
 }
 
