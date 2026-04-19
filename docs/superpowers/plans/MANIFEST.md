@@ -10,7 +10,7 @@
 
 ## Stages (strict order)
 
-- [ ] **stage-0** — [2026-04-18-sso-v2-stage-0-stabilization.md](2026-04-18-sso-v2-stage-0-stabilization.md) — fix bugs + tests
+- [~] **stage-0** — [2026-04-18-sso-v2-stage-0-stabilization.md](2026-04-18-sso-v2-stage-0-stabilization.md) — fix bugs + tests
 - [ ] **stage-1** — [2026-04-18-sso-v2-stage-1-errors.md](2026-04-18-sso-v2-stage-1-errors.md) — domain errors + protovalidate
 - [ ] **stage-2** — [2026-04-18-sso-v2-stage-2-data-layer.md](2026-04-18-sso-v2-stage-2-data-layer.md) — timestamps, indexes, pagination, goose
 - [ ] **stage-3** — [2026-04-18-sso-v2-stage-3-v2-controllers.md](2026-04-18-sso-v2-stage-3-v2-controllers.md) — v2 controllers, dual-serve
