@@ -33,6 +33,9 @@ func main() {
 	<-stop
 
 	application.GRPCServer.Stop()
+	if err := application.Storage.Close(); err != nil {
+		log.Error("failed to close storage", slog.Any("err", err))
+	}
 	log.Info("app stopped")
 }
 
