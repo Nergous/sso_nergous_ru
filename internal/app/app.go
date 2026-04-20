@@ -13,6 +13,7 @@ import (
 
 type App struct {
 	GRPCServer *grpcapp.App
+	Storage    *mariadb.Storage
 }
 
 func New(
@@ -47,5 +48,6 @@ func New(
 	grpcApp := grpcapp.New(log, grpcPort, authC, userC, appC)
 	return &App{
 		GRPCServer: grpcApp,
+		Storage:    storage,
 	}
 }

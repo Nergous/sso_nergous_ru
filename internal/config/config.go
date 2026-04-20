@@ -3,7 +3,6 @@ package config
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -71,7 +70,7 @@ func fetchConfigPath() string {
 }
 
 func (cfg *Database) GetDSN() string {
-	dsn := fmt.Sprintf(
+	return fmt.Sprintf(
 		"%s:%s@tcp(%s:%d)/%s?parseTime=true",
 		cfg.UsernameDB,
 		cfg.Password,
@@ -79,8 +78,4 @@ func (cfg *Database) GetDSN() string {
 		cfg.Port,
 		cfg.DBName,
 	)
-
-	log.Print(dsn)
-
-	return dsn
 }

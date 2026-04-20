@@ -20,6 +20,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInternal           = errors.New("internal error")
+	ErrTokenExpired       = errors.New("refresh token expired")
 )
 
 type AuthService struct {
@@ -27,9 +28,9 @@ type AuthService struct {
 	storage    *mariadb.Storage
 	tokenTTL   time.Duration
 	refreshTTL time.Duration
-	userR      *repositories.UserRepo
-	appR       *repositories.AppRepo
-	tokenR     *repositories.TokenRepo
+	userR      repositories.UserRepository
+	appR       repositories.AppRepository
+	tokenR     repositories.TokenRepository
 }
 
 // New returns a new instance of the Auth service
@@ -38,9 +39,9 @@ func NewAuthService(
 	storage *mariadb.Storage,
 	tokenTTL time.Duration,
 	refreshTTL time.Duration,
-	UserR *repositories.UserRepo,
-	AppR *repositories.AppRepo,
-	TokenR *repositories.TokenRepo,
+	UserR repositories.UserRepository,
+	AppR repositories.AppRepository,
+	TokenR repositories.TokenRepository,
 ) *AuthService {
 	return &AuthService{
 		log:        log,
@@ -54,7 +55,7 @@ func NewAuthService(
 }
 
 func (a *AuthService) Login(
-	ctx *context.Context,
+	ctx context.Context,
 	email string,
 	password string,
 	appId uint32,
@@ -135,7 +136,7 @@ func (a *AuthService) Login(
 	return accessToken, refreshToken, nil
 }
 
-func (a *AuthService) Logout(ctx *context.Context, refreshToken string) error {
+func (a *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	const op = "auth.Logout"
 	if refreshToken == "" {
 		return errors.New("refresh token is required")
@@ -152,7 +153,7 @@ func (a *AuthService) Logout(ctx *context.Context, refreshToken string) error {
 }
 
 func (a *AuthService) RegisterNewUser(
-	ctx *context.Context,
+	ctx context.Context,
 	email string,
 	password string,
 	steamURL string,
@@ -183,7 +184,7 @@ func (a *AuthService) RegisterNewUser(
 }
 
 func (a *AuthService) ValidateToken(
-	ctx *context.Context,
+	ctx context.Context,
 	tokenStr string,
 ) (userID uint32, isValid bool, err error) {
 	const op = "auth.ValidateToken"
@@ -240,7 +241,7 @@ func (a *AuthService) ValidateToken(
 }
 
 func (a *AuthService) Refresh(
-	ctx *context.Context,
+	ctx context.Context,
 	refreshToken string,
 ) (accessToken string, refreshTokenNew string, err error) {
 	const op = "auth.Refresh"
@@ -252,12 +253,10 @@ func (a *AuthService) Refresh(
 	}
 
 	if time.Now().After(rTkn.ExpiresAt) {
-		err = a.tokenR.DeleteRefreshToken(ctx, refreshToken)
-
-		ok, err := serr.Gerr(op, "refresh token not found", "failed to delete refresh token", a.log, err)
-		if !ok {
-			return "", "", err
+		if err := a.tokenR.DeleteRefreshToken(ctx, refreshToken); err != nil {
+			a.log.Warn("failed to delete expired refresh token", slog.String("op", op), slog.Any("err", err))
 		}
+		return "", "", ErrTokenExpired
 	}
 
 	user, err := a.userR.GetUserByID(ctx, rTkn.UserID)
