@@ -38,7 +38,7 @@ func (c *UserController) UserInfo(
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	email, steamURL, pathToPhoto, err := c.UserS.UserInfo(&ctx, userID)
+	email, steamURL, pathToPhoto, err := c.UserS.UserInfo(ctx, userID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -53,7 +53,7 @@ func (c *UserController) GetAllUsers(
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	users, err := c.UserS.GetAllUsers(&ctx)
+	users, err := c.UserS.GetAllUsers(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -95,7 +95,7 @@ func (c *UserController) UpdateUser(
 		SteamURL:    steamURL,
 		PathToPhoto: pathToPhoto,
 	}
-	err := c.UserS.UpdateUser(&ctx, updateModel)
+	err := c.UserS.UpdateUser(ctx, updateModel)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -113,7 +113,7 @@ func (c *UserController) DeleteUser(ctx context.Context, req *ssov1.DeleteUserRe
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	err := c.UserS.DeleteUser(&ctx, userID)
+	err := c.UserS.DeleteUser(ctx, userID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

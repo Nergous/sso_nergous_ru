@@ -27,7 +27,7 @@ func NewAppService(
 	}
 }
 
-func (s *AppService) GetApp(ctx *context.Context, id uint32) (*models.App, error) {
+func (s *AppService) GetApp(ctx context.Context, id uint32) (*models.App, error) {
 	const op = "auth.GetApp"
 
 	app, err := s.appR.GetAppByID(ctx, id)
@@ -39,7 +39,7 @@ func (s *AppService) GetApp(ctx *context.Context, id uint32) (*models.App, error
 	return app, nil
 }
 
-func (s *AppService) GetAllApps(ctx *context.Context) ([]models.App, error) {
+func (s *AppService) GetAllApps(ctx context.Context) ([]models.App, error) {
 	const op = "auth.GetAllApps"
 
 	apps, err := s.appR.GetAllApps(ctx)
@@ -51,7 +51,7 @@ func (s *AppService) GetAllApps(ctx *context.Context) ([]models.App, error) {
 	return apps, nil
 }
 
-func (s *AppService) CreateApp(ctx *context.Context, name, link, secret string) (uint32, error) {
+func (s *AppService) CreateApp(ctx context.Context, name, link, secret string) (uint32, error) {
 	const op = "auth.CreateApp"
 
 	app, err := s.appR.CreateApp(ctx, &models.App{Name: name, Link: link, Secret: secret, IsEnabled: true})
@@ -63,7 +63,7 @@ func (s *AppService) CreateApp(ctx *context.Context, name, link, secret string) 
 	return app, nil
 }
 
-func (s *AppService) UpdateApp(ctx *context.Context, id uint32, name, link string) error {
+func (s *AppService) UpdateApp(ctx context.Context, id uint32, name, link string) error {
 	const op = "auth.UpdateApp"
 
 	err := s.appR.UpdateApp(ctx, &models.App{ID: id, Name: name, Link: link})
@@ -74,7 +74,7 @@ func (s *AppService) UpdateApp(ctx *context.Context, id uint32, name, link strin
 	return nil
 }
 
-func (s *AppService) DeleteApp(ctx *context.Context, id uint32) error {
+func (s *AppService) DeleteApp(ctx context.Context, id uint32) error {
 	const op = "auth.DeleteApp"
 
 	err := s.appR.DeleteApp(ctx, id)
@@ -85,7 +85,7 @@ func (s *AppService) DeleteApp(ctx *context.Context, id uint32) error {
 	return nil
 }
 
-func (s *AppService) ChangeStatusApp(ctx *context.Context, id uint32) error {
+func (s *AppService) ChangeStatusApp(ctx context.Context, id uint32) error {
 	const op = "auth.ChangeStatusApp"
 
 	err := s.appR.ChangeStatusApp(ctx, id)
@@ -96,7 +96,7 @@ func (s *AppService) ChangeStatusApp(ctx *context.Context, id uint32) error {
 	return nil
 }
 
-func (s *AppService) AddAdmin(ctx *context.Context, userID uint32, appID uint32) error {
+func (s *AppService) AddAdmin(ctx context.Context, userID uint32, appID uint32) error {
 	const op = "auth.AddAdmin"
 
 	err := s.appR.AddAdmin(ctx, &models.Admin{UserID: userID, AppID: appID, IsAdmin: true})
@@ -107,7 +107,7 @@ func (s *AppService) AddAdmin(ctx *context.Context, userID uint32, appID uint32)
 	return nil
 }
 
-func (s *AppService) RemoveAdmin(ctx *context.Context, userID, appID uint32) error {
+func (s *AppService) RemoveAdmin(ctx context.Context, userID, appID uint32) error {
 	const op = "auth.RemoveAdmin"
 
 	err := s.appR.RemoveAdmin(ctx, userID, appID)
@@ -119,7 +119,7 @@ func (s *AppService) RemoveAdmin(ctx *context.Context, userID, appID uint32) err
 }
 
 func (s *AppService) IsAdmin(
-	ctx *context.Context,
+	ctx context.Context,
 	userID uint32,
 	appID uint32,
 ) (isAdmin bool, err error) {
@@ -136,7 +136,7 @@ func (s *AppService) IsAdmin(
 	return isAdmin, nil
 }
 
-func (s *AppService) GetAllUsersForApp(ctx *context.Context, appID uint32) ([]models.AppUser, error) {
+func (s *AppService) GetAllUsersForApp(ctx context.Context, appID uint32) ([]models.AppUser, error) {
 	const op = "auth.GetAllUsersForApp"
 
 	users, err := s.appR.GetAllUsersForApp(ctx, appID)

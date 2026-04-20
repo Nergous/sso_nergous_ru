@@ -27,7 +27,7 @@ func NewUserService(
 }
 
 func (a *UserService) UserInfo(
-	ctx *context.Context,
+	ctx context.Context,
 	userID uint32,
 ) (email, steamURL, pathToPhoto string, err error) {
 	const op = "auth.UserInfo"
@@ -45,7 +45,7 @@ func (a *UserService) UserInfo(
 	return usr.Email, usr.SteamURL, usr.PathToPhoto, nil
 }
 
-func (a *UserService) GetAllUsers(ctx *context.Context) ([]models.User, error) {
+func (a *UserService) GetAllUsers(ctx context.Context) ([]models.User, error) {
 	const op = "auth.GetUsers"
 
 	users, err := a.userR.GetAllUsers(ctx)
@@ -66,7 +66,7 @@ type UpdateModel struct {
 	PathToPhoto string
 }
 
-func (a *UserService) UpdateUser(ctx *context.Context, user *UpdateModel) error {
+func (a *UserService) UpdateUser(ctx context.Context, user *UpdateModel) error {
 	const op = "auth.UpdateUser"
 
 	var passHash []byte
@@ -106,7 +106,7 @@ func (a *UserService) UpdateUser(ctx *context.Context, user *UpdateModel) error 
 	return nil
 }
 
-func (a *UserService) DeleteUser(ctx *context.Context, userID uint32) error {
+func (a *UserService) DeleteUser(ctx context.Context, userID uint32) error {
 	const op = "auth.DeleteUser"
 
 	err := a.userR.DeleteUser(ctx, userID)

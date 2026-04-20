@@ -45,7 +45,7 @@ func (c *AuthController) Login(
 		return nil, err
 	}
 
-	accessToken, refreshToken, err := c.AuthS.Login(&ctx, email, password, appID)
+	accessToken, refreshToken, err := c.AuthS.Login(ctx, email, password, appID)
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -68,7 +68,7 @@ func (c *AuthController) Logout(
 		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
 	}
 
-	err := c.AuthS.Logout(&ctx, refreshToken)
+	err := c.AuthS.Logout(ctx, refreshToken)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -88,7 +88,7 @@ func (c *AuthController) Refresh(
 		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
 	}
 
-	accessToken, newRefreshToken, err := c.AuthS.Refresh(&ctx, refreshToken)
+	accessToken, newRefreshToken, err := c.AuthS.Refresh(ctx, refreshToken)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -115,7 +115,7 @@ func (c *AuthController) Register(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	userID, err := c.AuthS.RegisterNewUser(&ctx, email, password, steamURL, pathToPhoto)
+	userID, err := c.AuthS.RegisterNewUser(ctx, email, password, steamURL, pathToPhoto)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -136,7 +136,7 @@ func (c *AuthController) ValidateToken(
 		return nil, status.Error(codes.InvalidArgument, "token is required")
 	}
 
-	userID, isValid, err := c.AuthS.ValidateToken(&ctx, token)
+	userID, isValid, err := c.AuthS.ValidateToken(ctx, token)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

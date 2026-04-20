@@ -16,10 +16,10 @@ func NewTokenRepo(storage *mariadb.Storage) *TokenRepo {
 }
 
 func (r *TokenRepo) CreateRefreshToken(
-	ctx *context.Context,
+	ctx context.Context,
 	token *models.RefreshToken,
 ) (*models.RefreshToken, error) {
-	rows := r.storage.DB.WithContext(*ctx).Create(&token)
+	rows := r.storage.DB.WithContext(ctx).Create(&token)
 	if rows.Error != nil {
 		return nil, rows.Error
 	}
@@ -28,11 +28,11 @@ func (r *TokenRepo) CreateRefreshToken(
 }
 
 func (r *TokenRepo) GetRefreshToken(
-	ctx *context.Context,
+	ctx context.Context,
 	token string,
 ) (models.RefreshToken, error) {
 	var refreshToken models.RefreshToken
-	rows := r.storage.DB.WithContext(*ctx).Where("token = ?", token).First(&refreshToken)
+	rows := r.storage.DB.WithContext(ctx).Where("token = ?", token).First(&refreshToken)
 	if rows.Error != nil {
 		return models.RefreshToken{}, rows.Error
 	}
@@ -41,10 +41,10 @@ func (r *TokenRepo) GetRefreshToken(
 }
 
 func (r *TokenRepo) DeleteRefreshToken(
-	ctx *context.Context,
+	ctx context.Context,
 	token string,
 ) error {
-	rows := r.storage.DB.WithContext(*ctx).Where("token = ?", token).Delete(&models.RefreshToken{})
+	rows := r.storage.DB.WithContext(ctx).Where("token = ?", token).Delete(&models.RefreshToken{})
 	if rows.Error != nil {
 		return rows.Error
 	}
@@ -53,11 +53,11 @@ func (r *TokenRepo) DeleteRefreshToken(
 }
 
 func (r *TokenRepo) DeleteRefreshTokenByIDs(
-	ctx *context.Context,
+	ctx context.Context,
 	userID uint32,
 	appID uint32,
 ) error {
-	rows := r.storage.DB.WithContext(*ctx).Where("user_id = ? AND app_id = ?", userID, appID).Delete(&models.RefreshToken{})
+	rows := r.storage.DB.WithContext(ctx).Where("user_id = ? AND app_id = ?", userID, appID).Delete(&models.RefreshToken{})
 	if rows.Error != nil {
 		return rows.Error
 	}
@@ -66,11 +66,11 @@ func (r *TokenRepo) DeleteRefreshTokenByIDs(
 }
 
 func (r *TokenRepo) GetUserByRefreshToken(
-	ctx *context.Context,
+	ctx context.Context,
 	token string,
 ) (models.User, error) {
 	var rfrTkn models.RefreshToken
-	rows := r.storage.DB.WithContext(*ctx).Where("token = ?", token).First(&rfrTkn)
+	rows := r.storage.DB.WithContext(ctx).Where("token = ?", token).First(&rfrTkn)
 	if rows.Error != nil {
 		return models.User{}, rows.Error
 	}

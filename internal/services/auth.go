@@ -55,7 +55,7 @@ func NewAuthService(
 }
 
 func (a *AuthService) Login(
-	ctx *context.Context,
+	ctx context.Context,
 	email string,
 	password string,
 	appId uint32,
@@ -136,7 +136,7 @@ func (a *AuthService) Login(
 	return accessToken, refreshToken, nil
 }
 
-func (a *AuthService) Logout(ctx *context.Context, refreshToken string) error {
+func (a *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	const op = "auth.Logout"
 	if refreshToken == "" {
 		return errors.New("refresh token is required")
@@ -153,7 +153,7 @@ func (a *AuthService) Logout(ctx *context.Context, refreshToken string) error {
 }
 
 func (a *AuthService) RegisterNewUser(
-	ctx *context.Context,
+	ctx context.Context,
 	email string,
 	password string,
 	steamURL string,
@@ -184,7 +184,7 @@ func (a *AuthService) RegisterNewUser(
 }
 
 func (a *AuthService) ValidateToken(
-	ctx *context.Context,
+	ctx context.Context,
 	tokenStr string,
 ) (userID uint32, isValid bool, err error) {
 	const op = "auth.ValidateToken"
@@ -241,7 +241,7 @@ func (a *AuthService) ValidateToken(
 }
 
 func (a *AuthService) Refresh(
-	ctx *context.Context,
+	ctx context.Context,
 	refreshToken string,
 ) (accessToken string, refreshTokenNew string, err error) {
 	const op = "auth.Refresh"
