@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"sso/internal/controllers"
+	"sso/internal/transport/grpc/interceptors"
 
 	"google.golang.org/grpc"
 )
@@ -23,7 +25,9 @@ func New(
 	userController *controllers.UserController,
 	appController *controllers.AppController,
 ) *App {
-	gRPCServer := grpc.NewServer()
+	gRPCServer := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.TimeoutUnaryInterceptor(5 * time.Second)),
+	)
 
 	controllers.RegisterAuth(gRPCServer, authController.AuthS)
 	controllers.RegisterApp(gRPCServer, appController.AppS, appController.DefaultSecret)
