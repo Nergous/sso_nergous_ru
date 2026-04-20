@@ -20,6 +20,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInternal           = errors.New("internal error")
+	ErrTokenExpired       = errors.New("refresh token expired")
 )
 
 type AuthService struct {
@@ -252,12 +253,10 @@ func (a *AuthService) Refresh(
 	}
 
 	if time.Now().After(rTkn.ExpiresAt) {
-		err = a.tokenR.DeleteRefreshToken(ctx, refreshToken)
-
-		ok, err := serr.Gerr(op, "refresh token not found", "failed to delete refresh token", a.log, err)
-		if !ok {
-			return "", "", err
+		if err := a.tokenR.DeleteRefreshToken(ctx, refreshToken); err != nil {
+			a.log.Warn("failed to delete expired refresh token", slog.String("op", op), slog.Any("err", err))
 		}
+		return "", "", ErrTokenExpired
 	}
 
 	user, err := a.userR.GetUserByID(ctx, rTkn.UserID)
