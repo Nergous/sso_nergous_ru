@@ -28,9 +28,9 @@ type AuthService struct {
 	storage    *mariadb.Storage
 	tokenTTL   time.Duration
 	refreshTTL time.Duration
-	userR      *repositories.UserRepo
-	appR       *repositories.AppRepo
-	tokenR     *repositories.TokenRepo
+	userR      repositories.UserRepository
+	appR       repositories.AppRepository
+	tokenR     repositories.TokenRepository
 }
 
 // New returns a new instance of the Auth service
@@ -39,9 +39,9 @@ func NewAuthService(
 	storage *mariadb.Storage,
 	tokenTTL time.Duration,
 	refreshTTL time.Duration,
-	UserR *repositories.UserRepo,
-	AppR *repositories.AppRepo,
-	TokenR *repositories.TokenRepo,
+	UserR repositories.UserRepository,
+	AppR repositories.AppRepository,
+	TokenR repositories.TokenRepository,
 ) *AuthService {
 	return &AuthService{
 		log:        log,

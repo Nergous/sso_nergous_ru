@@ -14,12 +14,12 @@ import (
 
 type AppService struct {
 	log  *slog.Logger
-	appR *repositories.AppRepo
+	appR repositories.AppRepository
 }
 
 func NewAppService(
 	log *slog.Logger,
-	AppR *repositories.AppRepo,
+	AppR repositories.AppRepository,
 ) *AppService {
 	return &AppService{
 		log:  log,

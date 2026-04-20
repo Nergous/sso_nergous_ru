@@ -13,12 +13,12 @@ import (
 
 type UserService struct {
 	log   *slog.Logger
-	userR *repositories.UserRepo
+	userR repositories.UserRepository
 }
 
 func NewUserService(
 	log *slog.Logger,
-	UserR *repositories.UserRepo,
+	UserR repositories.UserRepository,
 ) *UserService {
 	return &UserService{
 		log:   log,
