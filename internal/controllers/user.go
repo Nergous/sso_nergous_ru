@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"sso/internal/services"
+	"sso/internal/transport/grpc/errmap"
 
 	ssov1 "github.com/Nergous/sso_protos/gen/go/sso"
 	"google.golang.org/grpc"
@@ -36,7 +37,7 @@ func (c *UserController) UserInfo(
 
 	email, steamURL, pathToPhoto, err := c.UserS.UserInfo(ctx, userID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.UserInfoResponse{Email: email, SteamUrl: steamURL, PathToPhoto: pathToPhoto}, nil
@@ -48,7 +49,7 @@ func (c *UserController) GetAllUsers(
 ) (*ssov1.GetAllUsersResponse, error) {
 	users, err := c.UserS.GetAllUsers(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	var usersModels []*ssov1.UserModel
@@ -85,9 +86,8 @@ func (c *UserController) UpdateUser(
 		SteamURL:    steamURL,
 		PathToPhoto: pathToPhoto,
 	}
-	err := c.UserS.UpdateUser(ctx, updateModel)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.UserS.UpdateUser(ctx, updateModel); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.UpdateUserResponse{}, nil
@@ -100,9 +100,8 @@ func (c *UserController) DeleteUser(ctx context.Context, req *ssov1.DeleteUserRe
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	err := c.UserS.DeleteUser(ctx, userID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.UserS.DeleteUser(ctx, userID); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.DeleteUserResponse{}, nil

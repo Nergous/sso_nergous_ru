@@ -2,10 +2,9 @@ package controllers
 
 import (
 	"context"
-	"errors"
 
-	"sso/internal/domain"
 	"sso/internal/services"
+	"sso/internal/transport/grpc/errmap"
 
 	ssov1 "github.com/Nergous/sso_protos/gen/go/sso"
 	"google.golang.org/grpc"
@@ -44,10 +43,7 @@ func (c *AuthController) Login(
 
 	accessToken, refreshToken, err := c.AuthS.Login(ctx, email, password, appID)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidCredentials) {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.LoginResponse{AccessToken: accessToken, RefreshToken: refreshToken}, nil
@@ -62,9 +58,8 @@ func (c *AuthController) Logout(
 		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
 	}
 
-	err := c.AuthS.Logout(ctx, refreshToken)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.AuthS.Logout(ctx, refreshToken); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.LogoutResponse{}, nil
@@ -81,7 +76,7 @@ func (c *AuthController) Refresh(
 
 	accessToken, newRefreshToken, err := c.AuthS.Refresh(ctx, refreshToken)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.LoginResponse{
@@ -100,12 +95,12 @@ func (c *AuthController) Register(
 	pathToPhoto := req.GetPathToPhoto()
 
 	if err := validateRegister(email, password, steamURL, pathToPhoto); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, err
 	}
 
 	userID, err := c.AuthS.RegisterNewUser(ctx, email, password, steamURL, pathToPhoto)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.RegisterResponse{UserId: userID}, nil
@@ -123,7 +118,7 @@ func (c *AuthController) ValidateToken(
 
 	userID, isValid, err := c.AuthS.ValidateToken(ctx, token)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.ValidateTokenResponse{UserId: userID, Valid: isValid}, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"sso/internal/services"
+	"sso/internal/transport/grpc/errmap"
 
 	ssov1 "github.com/Nergous/sso_protos/gen/go/sso"
 	"google.golang.org/grpc"
@@ -34,7 +35,7 @@ func (c *AppController) GetApp(ctx context.Context, req *ssov1.GetAppRequest) (*
 
 	app, err := c.AppS.GetApp(ctx, appID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	appModel := ssov1.AppModel{
@@ -50,7 +51,7 @@ func (c *AppController) GetApp(ctx context.Context, req *ssov1.GetAppRequest) (*
 func (c *AppController) GetAllApps(ctx context.Context, req *ssov1.GetAllAppsRequest) (*ssov1.GetAllAppsResponse, error) {
 	apps, err := c.AppS.GetAllApps(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	appModels := make([]*ssov1.AppModel, len(apps))
@@ -76,7 +77,7 @@ func (c *AppController) CreateApp(ctx context.Context, req *ssov1.CreateAppReque
 	defaultSecret := c.DefaultSecret
 	appID, err := c.AppS.CreateApp(ctx, name, link, defaultSecret)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	appModel := ssov1.AppModel{
@@ -98,9 +99,8 @@ func (c *AppController) UpdateApp(ctx context.Context, req *ssov1.UpdateAppReque
 		return nil, status.Error(codes.InvalidArgument, "app_id, name and link are required")
 	}
 
-	err := c.AppS.UpdateApp(ctx, appID, name, link)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.AppS.UpdateApp(ctx, appID, name, link); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.UpdateAppResponse{}, nil
@@ -113,9 +113,8 @@ func (c *AppController) DeleteApp(ctx context.Context, req *ssov1.DeleteAppReque
 		return nil, status.Error(codes.InvalidArgument, "app_id is required")
 	}
 
-	err := c.AppS.DeleteApp(ctx, appID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.AppS.DeleteApp(ctx, appID); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.DeleteAppResponse{}, nil
@@ -128,9 +127,8 @@ func (c *AppController) ChangeStatusApp(ctx context.Context, req *ssov1.ChangeSt
 		return nil, status.Error(codes.InvalidArgument, "app_id is required")
 	}
 
-	err := c.AppS.ChangeStatusApp(ctx, appID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.AppS.ChangeStatusApp(ctx, appID); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.ChangeStatusAppResponse{}, nil
@@ -144,9 +142,8 @@ func (c *AppController) AddAdmin(ctx context.Context, req *ssov1.AddAdminRequest
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	err := c.AppS.AddAdmin(ctx, userID, appID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.AppS.AddAdmin(ctx, userID, appID); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.AddAdminResponse{}, nil
@@ -160,9 +157,8 @@ func (c *AppController) RemoveAdmin(ctx context.Context, req *ssov1.RemoveAdminR
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	err := c.AppS.RemoveAdmin(ctx, userID, appID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := c.AppS.RemoveAdmin(ctx, userID, appID); err != nil {
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.RemoveAdminResponse{}, nil
@@ -181,7 +177,7 @@ func (c *AppController) IsAdmin(
 
 	isAdmin, err := c.AppS.IsAdmin(ctx, userID, appID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
@@ -196,7 +192,7 @@ func (C *AppController) GetAllUsersForApp(ctx context.Context, req *ssov1.GetAll
 
 	users, err := C.AppS.GetAllUsersForApp(ctx, appID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, errmap.ToV1(err)
 	}
 
 	var appUser []*ssov1.AppUser
