@@ -1,6 +1,6 @@
 module sso
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/Nergous/sso_protos v0.0.0-20260418113802-e13253c9006e
@@ -31,7 +31,7 @@ require (
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250811230008-5f3141c8851a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.22.5 // indirect
