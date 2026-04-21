@@ -2,12 +2,10 @@ package repositories
 
 import (
 	"context"
-	"errors"
 
+	"sso/internal/domain"
 	"sso/internal/models"
 	"sso/internal/storage/mariadb"
-
-	"gorm.io/gorm"
 )
 
 type AppRepo struct {
@@ -15,55 +13,56 @@ type AppRepo struct {
 }
 
 func NewAppRepo(storage *mariadb.Storage) *AppRepo {
-	return &AppRepo{
-		storage: storage,
-	}
+	return &AppRepo{storage: storage}
 }
 
 func (r *AppRepo) GetAppByID(ctx context.Context, id uint32) (*models.App, error) {
 	var app models.App
-	rows := r.storage.DB.WithContext(ctx).Where("id = ?", id).First(&app)
-	if rows.Error != nil {
-		return nil, rows.Error
+	err := r.storage.DB.WithContext(ctx).Where("id = ?", id).First(&app).Error
+	if isNotFound(err) {
+		return nil, domain.ErrAppNotFound
 	}
-
+	if err != nil {
+		return nil, err
+	}
 	return &app, nil
 }
 
 func (r *AppRepo) GetAllApps(ctx context.Context) ([]models.App, error) {
 	var apps []models.App
-	rows := r.storage.DB.WithContext(ctx).Find(&apps)
-	if rows.Error != nil {
-		return nil, rows.Error
+	err := r.storage.DB.WithContext(ctx).Find(&apps).Error
+	if err != nil {
+		return nil, err
 	}
-
 	return apps, nil
 }
 
 func (r *AppRepo) CreateApp(ctx context.Context, app *models.App) (uint32, error) {
-	rows := r.storage.DB.WithContext(ctx).Create(&app)
-	if rows.Error != nil {
-		return 0, rows.Error
+	err := r.storage.DB.WithContext(ctx).Create(app).Error
+	if isDuplicate(err) {
+		return 0, domain.ErrAppAlreadyExists
 	}
-
+	if err != nil {
+		return 0, err
+	}
 	return app.ID, nil
 }
 
 func (r *AppRepo) UpdateApp(ctx context.Context, app *models.App) error {
-	var oldApp models.App
-	rows := r.storage.DB.WithContext(ctx).Where("id = ?", app.ID).First(&oldApp)
-	if rows.Error != nil {
-		return rows.Error
+	res := r.storage.DB.WithContext(ctx).Model(&models.App{}).Where("id = ?", app.ID).Updates(map[string]any{
+		"name":   app.Name,
+		"secret": app.Secret,
+		"link":   app.Link,
+	})
+	if res.Error != nil {
+		if isDuplicate(res.Error) {
+			return domain.ErrAppAlreadyExists
+		}
+		return res.Error
 	}
-
-	oldApp.Name = app.Name
-	oldApp.Secret = app.Secret
-
-	rows = r.storage.DB.WithContext(ctx).Save(&oldApp)
-	if rows.Error != nil {
-		return rows.Error
+	if res.RowsAffected == 0 {
+		return domain.ErrAppNotFound
 	}
-
 	return nil
 }
 
@@ -83,27 +82,24 @@ func (r *AppRepo) ChangeStatusApp(ctx context.Context, id uint32) error {
 
 func (r *AppRepo) IsAdmin(ctx context.Context, userID uint32, appID uint32) (bool, error) {
 	var admin models.Admin
-	rows := r.storage.DB.WithContext(ctx).Where("user_id = ? AND app_id = ?", userID, appID).First(&admin)
-	if rows.Error != nil {
-		if errors.Is(rows.Error, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, rows.Error
-	}
-
-	if admin.ID == 0 {
+	err := r.storage.DB.WithContext(ctx).Where("user_id = ? AND app_id = ?", userID, appID).First(&admin).Error
+	if isNotFound(err) {
 		return false, nil
 	}
-
+	if err != nil {
+		return false, err
+	}
 	return admin.IsAdmin, nil
 }
 
 func (r *AppRepo) AddAdmin(ctx context.Context, admin *models.Admin) error {
-	rows := r.storage.DB.WithContext(ctx).Create(&admin)
-	if rows.Error != nil {
-		return rows.Error
+	err := r.storage.DB.WithContext(ctx).Create(admin).Error
+	if isDuplicate(err) {
+		return domain.ErrUserAlreadyExists
 	}
-
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
