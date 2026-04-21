@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 
+	"sso/internal/domain"
 	"sso/internal/models"
 	"sso/internal/storage/mariadb"
 )
@@ -19,11 +20,10 @@ func (r *TokenRepo) CreateRefreshToken(
 	ctx context.Context,
 	token *models.RefreshToken,
 ) (*models.RefreshToken, error) {
-	rows := r.storage.DB.WithContext(ctx).Create(&token)
-	if rows.Error != nil {
-		return nil, rows.Error
+	err := r.storage.DB.WithContext(ctx).Create(token).Error
+	if err != nil {
+		return nil, err
 	}
-
 	return token, nil
 }
 
@@ -32,11 +32,13 @@ func (r *TokenRepo) GetRefreshToken(
 	token string,
 ) (models.RefreshToken, error) {
 	var refreshToken models.RefreshToken
-	rows := r.storage.DB.WithContext(ctx).Where("token = ?", token).First(&refreshToken)
-	if rows.Error != nil {
-		return models.RefreshToken{}, rows.Error
+	err := r.storage.DB.WithContext(ctx).Where("token = ?", token).First(&refreshToken).Error
+	if isNotFound(err) {
+		return models.RefreshToken{}, domain.ErrInvalidToken
 	}
-
+	if err != nil {
+		return models.RefreshToken{}, err
+	}
 	return refreshToken, nil
 }
 
@@ -44,12 +46,7 @@ func (r *TokenRepo) DeleteRefreshToken(
 	ctx context.Context,
 	token string,
 ) error {
-	rows := r.storage.DB.WithContext(ctx).Where("token = ?", token).Delete(&models.RefreshToken{})
-	if rows.Error != nil {
-		return rows.Error
-	}
-
-	return nil
+	return r.storage.DB.WithContext(ctx).Where("token = ?", token).Delete(&models.RefreshToken{}).Error
 }
 
 func (r *TokenRepo) DeleteRefreshTokenByIDs(
@@ -57,12 +54,7 @@ func (r *TokenRepo) DeleteRefreshTokenByIDs(
 	userID uint32,
 	appID uint32,
 ) error {
-	rows := r.storage.DB.WithContext(ctx).Where("user_id = ? AND app_id = ?", userID, appID).Delete(&models.RefreshToken{})
-	if rows.Error != nil {
-		return rows.Error
-	}
-
-	return nil
+	return r.storage.DB.WithContext(ctx).Where("user_id = ? AND app_id = ?", userID, appID).Delete(&models.RefreshToken{}).Error
 }
 
 func (r *TokenRepo) GetUserByRefreshToken(
@@ -70,10 +62,12 @@ func (r *TokenRepo) GetUserByRefreshToken(
 	token string,
 ) (models.User, error) {
 	var rfrTkn models.RefreshToken
-	rows := r.storage.DB.WithContext(ctx).Where("token = ?", token).First(&rfrTkn)
-	if rows.Error != nil {
-		return models.User{}, rows.Error
+	err := r.storage.DB.WithContext(ctx).Where("token = ?", token).First(&rfrTkn).Error
+	if isNotFound(err) {
+		return models.User{}, domain.ErrInvalidToken
 	}
-
+	if err != nil {
+		return models.User{}, err
+	}
 	return rfrTkn.User, nil
 }

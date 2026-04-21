@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"sso/internal/models"
 	"sso/internal/repositories"
-	serr "sso/lib/serr"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -31,17 +31,11 @@ func (a *UserService) UserInfo(
 	userID uint32,
 ) (email, steamURL, pathToPhoto string, err error) {
 	const op = "auth.UserInfo"
-	log := a.log.With(
-		slog.String("op", op),
-		slog.Any("user_id", userID),
-	)
 
 	usr, err := a.userR.GetUserByID(ctx, userID)
-	ok, err := serr.Gerr(op, "user not found", "failed to get user", log, err)
-	if !ok {
-		return "", "", "", err
+	if err != nil {
+		return "", "", "", fmt.Errorf("%s: %w", op, err)
 	}
-
 	return usr.Email, usr.SteamURL, usr.PathToPhoto, nil
 }
 
@@ -49,12 +43,9 @@ func (a *UserService) GetAllUsers(ctx context.Context) ([]models.User, error) {
 	const op = "auth.GetUsers"
 
 	users, err := a.userR.GetAllUsers(ctx)
-
-	ok, err := serr.Gerr(op, "users not found", "failed to get users", a.log, err)
-	if !ok {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-
 	return users, nil
 }
 
@@ -68,51 +59,40 @@ type UpdateModel struct {
 
 func (a *UserService) UpdateUser(ctx context.Context, user *UpdateModel) error {
 	const op = "auth.UpdateUser"
+	log := a.log.With(slog.String("op", op))
 
 	var passHash []byte
 
 	if user.Password != "" {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-		ok, err := serr.LogFerr(err, op, "failed to generate password hash", a.log)
-		if !ok {
-			return err
+		if err != nil {
+			log.Error("failed to generate password hash", slog.Any("err", err))
+			return fmt.Errorf("%s: %w", op, err)
 		}
 		passHash = hashedPassword
 	}
 
-	var err error
-	if passHash == nil {
-		err = a.userR.UpdateUser(ctx, models.User{
-			ID:          user.ID,
-			Email:       user.Email,
-			SteamURL:    user.SteamURL,
-			PathToPhoto: user.PathToPhoto,
-		})
-	} else {
-		err = a.userR.UpdateUser(ctx, models.User{
-			ID:          user.ID,
-			Email:       user.Email,
-			PassHash:    string(passHash),
-			SteamURL:    user.SteamURL,
-			PathToPhoto: user.PathToPhoto,
-		})
+	m := models.User{
+		ID:          user.ID,
+		Email:       user.Email,
+		SteamURL:    user.SteamURL,
+		PathToPhoto: user.PathToPhoto,
+	}
+	if passHash != nil {
+		m.PassHash = string(passHash)
 	}
 
-	ok, err := serr.Gerr(op, "failed to update user", "failed to update user", a.log, err)
-	if !ok {
-		return err
+	if err := a.userR.UpdateUser(ctx, m); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
 	}
-
 	return nil
 }
 
 func (a *UserService) DeleteUser(ctx context.Context, userID uint32) error {
 	const op = "auth.DeleteUser"
 
-	err := a.userR.DeleteUser(ctx, userID)
-	ok, err := serr.Gerr(op, "failed to delete user", "failed to delete user", a.log, err)
-	if !ok {
-		return err
+	if err := a.userR.DeleteUser(ctx, userID); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	return nil
 }

@@ -26,7 +26,10 @@ func New(
 	appController *controllers.AppController,
 ) *App {
 	gRPCServer := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.TimeoutUnaryInterceptor(5 * time.Second)),
+		grpc.ChainUnaryInterceptor(
+			interceptors.TimeoutUnaryInterceptor(5*time.Second),
+			interceptors.ValidateUnaryInterceptor(),
+		),
 	)
 
 	controllers.RegisterAuth(gRPCServer, authController.AuthS)

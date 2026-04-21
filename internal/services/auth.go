@@ -3,24 +3,18 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
+	"sso/internal/domain"
 	"sso/internal/models"
 	"sso/internal/repositories"
 	"sso/internal/storage/mariadb"
 	jwt_sso "sso/lib/jwt"
-	serr "sso/lib/serr"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
-)
-
-var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInternal           = errors.New("internal error")
-	ErrTokenExpired       = errors.New("refresh token expired")
 )
 
 type AuthService struct {
@@ -33,7 +27,7 @@ type AuthService struct {
 	tokenR     repositories.TokenRepository
 }
 
-// New returns a new instance of the Auth service
+// NewAuthService returns a new instance of the Auth service.
 func NewAuthService(
 	log *slog.Logger,
 	storage *mariadb.Storage,
@@ -56,130 +50,94 @@ func NewAuthService(
 
 func (a *AuthService) Login(
 	ctx context.Context,
-	email string,
-	password string,
-	appId uint32,
-) (accessToken string, refreshToken string, err error) {
+	email, password string,
+	appID uint32,
+) (accessToken, refreshToken string, err error) {
 	const op = "auth.Login"
+	log := a.log.With(slog.String("op", op))
 
 	user, err := a.userR.GetUserByEmail(ctx, email)
-
-	ok, _ := serr.Gerr(op, "user not found", "failed to get user", a.log, err)
-	if !ok {
-		return "", "", ErrInvalidCredentials
+	if errors.Is(err, domain.ErrUserNotFound) {
+		return "", "", domain.ErrInvalidCredentials
 	}
-
-	ok, _ = serr.LogFerr(
-		bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)),
-		op,
-		"invalid password",
-		a.log,
-	)
-	if !ok {
-		return "", "", ErrInvalidCredentials
-	}
-
-	app, err := a.appR.GetAppByID(ctx, appId)
-	ok, err = serr.Gerr(op, "app not found", "failed to get app", a.log, err)
-	if !ok {
-		return "", "", err
-	}
-
-	isAdmin, err := a.appR.IsAdmin(ctx, user.ID, appId)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			isAdmin = false
-		} else {
-			return "", "", err
-		}
+		log.Error("failed to get user", slog.Any("err", err))
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	accessToken, err = jwt_sso.NewAccessToken(
-		user.ID,
-		user.Email,
-		isAdmin,
-		app.ID,
-		app.Secret,
-		a.tokenTTL,
-	)
-
-	ok, err = serr.LogFerr(err, op, "failed to generate token", a.log)
-	if !ok {
-		return "", "", err
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(password)); err != nil {
+		return "", "", domain.ErrInvalidCredentials
 	}
 
+	app, err := a.appR.GetAppByID(ctx, appID)
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	isAdmin, err := a.appR.IsAdmin(ctx, user.ID, appID)
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	accessToken, err = jwt_sso.NewAccessToken(user.ID, user.Email, isAdmin, app.ID, app.Secret, a.tokenTTL)
+	if err != nil {
+		log.Error("failed to sign access token", slog.Any("err", err))
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
 	refreshToken, err = jwt_sso.NewRefreshToken()
-	ok, err = serr.LogFerr(err, op, "failed to generate refresh token", a.log)
-	if !ok {
-		return "", "", err
-	}
-
-	expiresAt := time.Now().Add(a.refreshTTL)
-
-	err = a.tokenR.DeleteRefreshTokenByIDs(ctx, user.ID, appId)
 	if err != nil {
-		return "", "", err
+		log.Error("failed to generate refresh token", slog.Any("err", err))
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	_, err = a.tokenR.CreateRefreshToken(ctx, &models.RefreshToken{
+	if err := a.tokenR.DeleteRefreshTokenByIDs(ctx, user.ID, appID); err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+	if _, err := a.tokenR.CreateRefreshToken(ctx, &models.RefreshToken{
 		Token:     refreshToken,
 		UserID:    user.ID,
-		AppID:     appId,
-		ExpiresAt: expiresAt,
-	})
-
-	ok, err = serr.Gerr(op, "failed to save refresh token", "failed to save refresh token", a.log, err)
-	if !ok {
-		return "", "", err
+		AppID:     appID,
+		ExpiresAt: time.Now().Add(a.refreshTTL),
+	}); err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
-
 	return accessToken, refreshToken, nil
 }
 
 func (a *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	const op = "auth.Logout"
 	if refreshToken == "" {
-		return errors.New("refresh token is required")
+		return domain.ErrValidationFailed
 	}
 
-	err := a.tokenR.DeleteRefreshToken(ctx, refreshToken)
-
-	ok, err := serr.Gerr(op, "refresh token not found", "failed to delete refresh token", a.log, err)
-	if !ok {
-		return err
+	if err := a.tokenR.DeleteRefreshToken(ctx, refreshToken); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
 	}
-
 	return nil
 }
 
 func (a *AuthService) RegisterNewUser(
 	ctx context.Context,
-	email string,
-	password string,
-	steamURL string,
-	pathToPhoto string,
-) (id uint32, err error) {
+	email, password, steamURL, pathToPhoto string,
+) (uint32, error) {
 	const op = "auth.RegisterNewUser"
+	log := a.log.With(slog.String("op", op))
 
 	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	ok, err := serr.LogFerr(err, op, "failed to generate password hash", a.log)
-	if !ok {
-		return 0, err
+	if err != nil {
+		log.Error("failed to generate password hash", slog.Any("err", err))
+		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	id, err = a.userR.CreateUser(ctx, &models.User{
+	id, err := a.userR.CreateUser(ctx, &models.User{
 		Email:       email,
 		PassHash:    string(passHash),
 		SteamURL:    steamURL,
 		PathToPhoto: pathToPhoto,
 	})
-
-	ok, err = serr.Gerr(op, "failed to create user", "failed to create user", a.log, err)
-
-	if !ok {
-		return 0, err
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
 	}
-
 	return id, nil
 }
 
@@ -188,52 +146,51 @@ func (a *AuthService) ValidateToken(
 	tokenStr string,
 ) (userID uint32, isValid bool, err error) {
 	const op = "auth.ValidateToken"
+
 	parser := jwt.NewParser()
 	claims := jwt.MapClaims{}
 
-	_, _, err = parser.ParseUnverified(tokenStr, &claims)
-	ok, err := serr.LogFerr(err, op, "failed to validate token", a.log)
-	if !ok {
-		return 0, false, err
+	if _, _, err := parser.ParseUnverified(tokenStr, &claims); err != nil {
+		return 0, false, domain.ErrInvalidToken
 	}
 
 	appIDFloat, ok := claims["app_id"].(float64)
 	if !ok {
-		return 0, false, serr.Ferr(op, "failed to validate")
+		return 0, false, domain.ErrInvalidToken
 	}
-
 	appID := uint32(appIDFloat)
 
 	app, err := a.appR.GetAppByID(ctx, appID)
-	ok, err = serr.Gerr(op, "app not found", "failed to get app", a.log, err)
-	if !ok {
-		return 0, false, err
+	if err != nil {
+		if errors.Is(err, domain.ErrAppNotFound) {
+			return 0, false, domain.ErrInvalidToken
+		}
+		return 0, false, fmt.Errorf("%s: %w", op, err)
 	}
 
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, serr.Ferr(op, "invalid token")
+			return nil, domain.ErrInvalidToken
 		}
 		return []byte(app.Secret), nil
 	})
 	if err != nil || !token.Valid {
-		return 0, false, serr.Ferr(op, "failed to validate")
+		return 0, false, domain.ErrInvalidToken
 	}
 
-	claims, ok = token.Claims.(jwt.MapClaims)
-
+	mc, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return 0, false, serr.Ferr(op, "failed to validate")
+		return 0, false, domain.ErrInvalidToken
 	}
 
-	uidFloat, ok := claims["uid"].(float64)
+	uidFloat, ok := mc["uid"].(float64)
 	if !ok {
-		return 0, false, serr.Ferr(op, "failed to validate")
+		return 0, false, domain.ErrInvalidToken
 	}
 
-	if expFloat, ok := claims["exp"].(float64); ok {
+	if expFloat, ok := mc["exp"].(float64); ok {
 		if int64(expFloat) < time.Now().Unix() {
-			return 0, false, serr.Ferr(op, "token expired")
+			return 0, false, domain.ErrTokenExpired
 		}
 	}
 
@@ -243,79 +200,60 @@ func (a *AuthService) ValidateToken(
 func (a *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,
-) (accessToken string, refreshTokenNew string, err error) {
+) (accessToken, refreshTokenNew string, err error) {
 	const op = "auth.Refresh"
+	log := a.log.With(slog.String("op", op))
 
 	rTkn, err := a.tokenR.GetRefreshToken(ctx, refreshToken)
-	ok, err := serr.Gerr(op, "refresh token not found", "failed to get refresh token", a.log, err)
-	if !ok {
-		return "", "", err
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	if time.Now().After(rTkn.ExpiresAt) {
 		if err := a.tokenR.DeleteRefreshToken(ctx, refreshToken); err != nil {
-			a.log.Warn("failed to delete expired refresh token", slog.String("op", op), slog.Any("err", err))
+			log.Warn("failed to delete expired refresh token", slog.Any("err", err))
 		}
-		return "", "", ErrTokenExpired
+		return "", "", domain.ErrTokenExpired
 	}
 
 	user, err := a.userR.GetUserByID(ctx, rTkn.UserID)
-	ok, err = serr.Gerr(op, "user not found", "failed to get user", a.log, err)
-	if !ok {
-		return "", "", err
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	isAdmin, err := a.appR.IsAdmin(ctx, user.ID, rTkn.AppID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			isAdmin = false
-		} else {
-			return "", "", err
-		}
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	app, err := a.appR.GetAppByID(ctx, rTkn.AppID)
-	ok, err = serr.Gerr(op, "app not found", "failed to get app", a.log, err)
-	if !ok {
-		return "", "", err
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	accessToken, err = jwt_sso.NewAccessToken(
-		user.ID,
-		user.Email,
-		isAdmin,
-		app.ID,
-		app.Secret,
-		a.tokenTTL,
-	)
-	ok, err = serr.LogFerr(err, op, "failed to generate access token", a.log)
-	if !ok {
-		return "", "", err
+	accessToken, err = jwt_sso.NewAccessToken(user.ID, user.Email, isAdmin, app.ID, app.Secret, a.tokenTTL)
+	if err != nil {
+		log.Error("failed to generate access token", slog.Any("err", err))
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	newRefreshToken, err := jwt_sso.NewRefreshToken()
-	ok, err = serr.LogFerr(err, op, "failed to generate refresh token", a.log)
-	if !ok {
-		return "", "", err
+	if err != nil {
+		log.Error("failed to generate refresh token", slog.Any("err", err))
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	newExpiresAt := time.Now().Add(a.refreshTTL)
-
-	_, err = a.tokenR.CreateRefreshToken(ctx, &models.RefreshToken{
+	if _, err := a.tokenR.CreateRefreshToken(ctx, &models.RefreshToken{
 		Token:     newRefreshToken,
 		UserID:    user.ID,
 		AppID:     app.ID,
-		ExpiresAt: newExpiresAt,
-	})
-	ok, err = serr.LogFerr(err, op, "failed to create refresh token", a.log)
-	if !ok {
-		return "", "", err
+		ExpiresAt: time.Now().Add(a.refreshTTL),
+	}); err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = a.tokenR.DeleteRefreshToken(ctx, refreshToken)
-	ok, err = serr.Gerr(op, "refresh token not found", "failed to delete refresh token", a.log, err)
-	if !ok {
-		return "", "", err
+	if err := a.tokenR.DeleteRefreshToken(ctx, refreshToken); err != nil {
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	return accessToken, newRefreshToken, nil

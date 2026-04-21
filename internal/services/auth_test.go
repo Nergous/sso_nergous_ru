@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"sso/internal/domain"
 	"sso/internal/models"
 	"sso/internal/repositories"
 	"sso/internal/services"
@@ -65,14 +66,14 @@ func TestAuthService_Login_WrongPassword_ReturnsInvalidCredentials(t *testing.T)
 	require.NoError(t, err)
 
 	_, _, err = s.svc.Login(ctx, "bob@example.com", "wrongpass", appID)
-	require.ErrorIs(t, err, services.ErrInvalidCredentials)
+	require.ErrorIs(t, err, domain.ErrInvalidCredentials)
 }
 
 func TestAuthService_Login_UnknownEmail_ReturnsInvalidCredentials(t *testing.T) {
 	s := newSuite(t, time.Hour)
 	appID := s.seedApp(t)
 	_, _, err := s.svc.Login(context.Background(), "ghost@example.com", "whatever", appID)
-	require.ErrorIs(t, err, services.ErrInvalidCredentials)
+	require.ErrorIs(t, err, domain.ErrInvalidCredentials)
 }
 
 func TestAuthService_Refresh_HappyPath(t *testing.T) {
@@ -102,7 +103,7 @@ func TestAuthService_Refresh_ExpiredToken_ReturnsErrTokenExpired(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	_, _, err = s.svc.Refresh(ctx, refresh)
-	require.ErrorIs(t, err, services.ErrTokenExpired)
+	require.ErrorIs(t, err, domain.ErrTokenExpired)
 }
 
 func TestAuthService_Logout_DeletesRefreshToken(t *testing.T) {
