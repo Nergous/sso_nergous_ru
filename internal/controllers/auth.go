@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"sso/internal/domain"
 	"sso/internal/services"
 
 	ssov1 "github.com/Nergous/sso_protos/gen/go/sso"
@@ -43,7 +44,7 @@ func (c *AuthController) Login(
 
 	accessToken, refreshToken, err := c.AuthS.Login(ctx, email, password, appID)
 	if err != nil {
-		if errors.Is(err, services.ErrInvalidCredentials) {
+		if errors.Is(err, domain.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		return nil, status.Error(codes.Internal, err.Error())
