@@ -1,29 +1,131 @@
 version: "3"
 
-tasks:
-    migrate:
-        aliases:
-            - m
-        desc: "Run migrations up"
-        cmds:
-            - CGO_ENABLED=1 go run ./cmd/migrator/ --storage-path=./storage/sso.db --migrations-path=./migrations
+# Local development entry points.
+#
+# DB connection params are resolved per binary in this order:
+#   1. CLI flag (-host / -port / -user / -password / -db / -tls)
+#   2. env var (DB_HOST / DB_PORT / DB_USERNAME / DB_PASSWORD / DB_NAME / DB_TLS)
+#   3. sane local default
+#
+# Each binary calls godotenv.Load() on startup, so .env in CWD is picked
+# up automatically. See .env.example for the full list of supported vars.
 
-    migrate-down:
-        aliases:
-            - md
-        desc: "Rollback migrations"
-        cmds:
-            - CGO_ENABLED=1 go run ./cmd/migrator/ --storage-path=./storage/sso.db --migrations-path=./migrations --down
-    migrate-refresh:
-        aliases:
-            - mr
-        desc: "Refresh migrations"
-        cmds:
-            - task: migrate-down
-            - task: migrate
-    migrate_test:
-        aliases:
-            - mt
-        desc: "Run test migrations"
-        cmds:
-            - CGO_ENABLED=1 go run ./cmd/migrator/ --storage-path=./storage/sso.db --migrations-path=./tests/migrations --migrations-table=migrations_test
+tasks:
+  # ----- Generate / Format -------------------------------------------------
+  sqlc:
+    aliases:
+      - sqlc:gen
+    desc: "Regenerate dbgen/* from queries/*.sql"
+    cmds:
+      - sqlc generate
+
+  tidy:
+    desc: "Tidy go.mod / go.sum"
+    cmds:
+      - go mod tidy
+
+  fmt:
+    desc: "Format Go sources via gofmt -s"
+    cmds:
+      - gofmt -w -s .
+
+  vet:
+    desc: "Run go vet on all packages"
+    cmds:
+      - go vet ./...
+
+  # ----- Build / Test ------------------------------------------------------
+  build:
+    desc: "Compile all packages"
+    cmds:
+      - go build ./...
+
+  test:
+    desc: "Run all tests"
+    cmds:
+      - go test ./...
+
+  test:e2e:
+    desc: "Run end-to-end tests (gRPC over bufconn + SQLite, build tag 'e2e')"
+    cmds:
+      - go test -tags e2e ./internal/tests/e2e/...
+
+  check:
+    desc: "vet + build + test + e2e (CI gate)"
+    cmds:
+      - task: vet
+      - task: build
+      - task: test
+      - task: test:e2e
+
+  # ----- Server ------------------------------------------------------------
+  run:
+    desc: "Run the SSO gRPC server (config: config/config.yaml)"
+    cmds:
+      - go run ./cmd/sso -cp config/config.yaml
+
+  # ----- Database management ----------------------------------------------
+  db:create:
+    desc: "Create the MariaDB database with utf8mb4 charset"
+    cmds:
+      - go run ./cmd/migrate -cmd create-db
+
+  db:drop:
+    desc: "Drop the MariaDB database"
+    cmds:
+      - go run ./cmd/migrate -cmd drop-db
+
+  db:reset:
+    desc: "Drop, recreate, and re-migrate the MariaDB database"
+    cmds:
+      - task: db:drop
+      - task: db:create
+      - task: migrate:up
+
+  migrate:up:
+    desc: "Apply all pending MariaDB migrations"
+    cmds:
+      - go run ./cmd/migrate -migrations ./migrations/mariadb -cmd up
+
+  migrate:down:
+    desc: "Roll back ONE MariaDB migration"
+    cmds:
+      - go run ./cmd/migrate -migrations ./migrations/mariadb -cmd down -steps 1
+
+  migrate:version:
+    desc: "Show current MariaDB schema version"
+    cmds:
+      - go run ./cmd/migrate -migrations ./migrations/mariadb -cmd version
+
+  migrate:drop:
+    desc: "Drop ALL tables incl. schema_migrations (db:drop removes the database itself)"
+    cmds:
+      - go run ./cmd/migrate -migrations ./migrations/mariadb -cmd drop
+
+  migrate:force:
+    desc: "Forcibly set schema_migrations version. Usage: task migrate:force -- -force-version N"
+    cmds:
+      - go run ./cmd/migrate -migrations ./migrations/mariadb -cmd force {{.CLI_ARGS}}
+
+  # ----- Operations --------------------------------------------------------
+  seed:
+    desc: "Seed sso-admin app, 6 admin roles, and first admin user (idempotent; SSO_SEED_ADMIN_* in .env)"
+    cmds:
+      - go run ./cmd/seed
+
+  audit:purge:
+    desc: "Delete audit_events older than the retention window. Pass flags after --, e.g. task audit:purge -- -retention-days 90"
+    cmds:
+      - go run ./cmd/audit-purge {{.CLI_ARGS}}
+
+  audit:purge:dry-run:
+    desc: "Count rows audit:purge would delete without touching data"
+    cmds:
+      - go run ./cmd/audit-purge -dry-run {{.CLI_ARGS}}
+
+  # ----- Keys --------------------------------------------------------------
+  key:generate:
+    desc: "Generate Ed25519 keypair for JWT signing (requires openssl)"
+    cmds:
+      - openssl genpkey -algorithm Ed25519 -out keys/ed25519_private.pem
+      - openssl pkey -in keys/ed25519_private.pem -pubout -out keys/ed25519_public.pem

@@ -1,1 +1,8 @@
-config/local.yaml
+config/prod.yaml
+.claude
+.github
+old_sso
+keys/
+.env
+*.exe
+todo/
