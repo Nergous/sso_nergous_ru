@@ -1,0 +1,189 @@
+# Application environment: local | dev | prod.
+# Drives profile-specific defaults (e.g. reflection on/off, TLS strictness).
+env: local
+
+# Logging.
+log:
+  # Severity threshold: debug | info | warn | error.
+  # Use "debug" locally; "info" is a sane default for prod.
+  level: debug
+
+  # Output format: text (human-readable) | json (machine-parseable).
+  # Prefer "json" in prod for log aggregators / structured queries.
+  format: text
+
+  # Where to write: stdout | file. With containerized deploys prefer "stdout"
+  # and let the runtime collect logs. Use "file" only without an aggregator.
+  sink: stdout
+
+  # Required when sink=file. Relative to CWD or absolute. Note: there is no
+  # built-in rotation — pair with logrotate / lumberjack if writing to a file.
+  path: logs/app.log
+
+  # Attach source code location (file:line) to each record. Useful in local/dev
+  # for tracing log sites; off in prod (extra cost, noisier output).
+  add_source: false
+
+# gRPC server settings.
+grpc:
+  # Bind address. "0.0.0.0" listens on all interfaces; use "127.0.0.1"
+  # to restrict to localhost. Quote when switching to IPv6 ("::").
+  host: "0.0.0.0"
+
+  # Listening port. Override via .env (GRPC_PORT) per environment.
+  port: 44044
+
+  # Timeout for the initial handshake (HTTP/2 + TLS, if enabled).
+  # Slow/stalled clients are dropped if they don't complete it in time.
+  connection_timeout: 30s
+
+  # Budget for GracefulStop on SIGTERM/SIGINT — time given to drain in-flight RPCs
+  # before the server is stopped forcibly. Keep <= container terminationGracePeriod.
+  shutdown_timeout: 30s
+
+  # Per-message size limits in bytes. Defaults match gRPC's stock 4 MiB cap;
+  # raise for media/large payloads, lower to harden against memory abuse.
+  max_recv_msg_size: 4194304 # 4 MiB
+  max_send_msg_size: 4194304 # 4 MiB
+
+  # HTTP/2 keepalive — detects half-open connections and bounds idle clients.
+  keepalive:
+    # Server pings idle clients every `time` (no pings while RPCs are in flight).
+    time: 60s
+
+    # Ack must arrive within `timeout` or the connection is closed.
+    timeout: 20s
+
+    # Floor on client ping interval — clients pinging more often than this get
+    # a GOAWAY. Protects against ping floods.
+    min_time: 30s
+
+    # If true, clients may ping even when no streams are active. Off by default;
+    # turn on only if you need keepalive on idle conns.
+    permit_without_stream: false
+
+  # Standard grpc.health.v1.Health service. Required for k8s readiness/liveness
+  # probes and most external health-check clients.
+  health_check:
+    enabled: true
+
+  # gRPC server reflection — lets tools like grpcurl discover the schema at runtime.
+  # Convenient in local/dev. Set to false in prod to avoid exposing the API surface.
+  reflection:
+    enabled: true
+
+  # Transport-level TLS for the gRPC listener.
+  # When enabled=true, cert_path and key_path are required (PEM-encoded files).
+  tls:
+    enabled: false
+    cert_path: ""
+    key_path: ""
+
+# Public HTTP listener — fronts the gRPC server via grpc-gateway. Hosts the
+# REST surface for the admin SPA plus /healthz, /readyz, /metrics. Disable by
+# setting enabled=false to run gRPC-only.
+http:
+  enabled: true
+
+  # Bind address. "0.0.0.0" listens on all interfaces; "127.0.0.1" restricts
+  # to localhost (useful when a sidecar / reverse proxy terminates TLS).
+  host: "0.0.0.0"
+
+  # Listening port. Override via .env (HTTP_PORT) per environment.
+  port: 8080
+
+  # Budget for http.Server.Shutdown — time given to drain in-flight HTTP
+  # requests before the listener is closed. Keep <= grpc.shutdown_timeout
+  # so that HTTP drains first and only then gRPC handlers wind down.
+  shutdown_timeout: 30s
+
+  cors:
+    # Exact-match origin allowlist. Use "*" only for local dev — wildcard
+    # disables credentials per the CORS spec, which breaks cookie auth.
+    allowed_origins:
+      - "http://localhost:5173"
+
+  # Transport-level TLS for the HTTP listener. In prod a reverse proxy
+  # typically terminates TLS upstream; turn this on only when the listener
+  # is exposed directly.
+  tls:
+    enabled: false
+    cert_path: ""
+    key_path: ""
+
+# Database settings. Driver: github.com/go-sql-driver/mysql (works with MariaDB).
+database:
+  driver: mysql
+
+  # Endpoint and credentials — the "before-?" segment of the DSN
+  # (user:pass@tcp(host:port)/db_name).
+  connection:
+    # DB endpoint. Override per environment via .env (DB_HOST / DB_PORT).
+    host: localhost
+    port: 3306
+
+    # Credentials. ALWAYS override in non-local environments via .env
+    # (DB_USERNAME / DB_PASSWORD). Empty password is acceptable for local only.
+    username: root
+    password: ""
+
+    # Schema name (the segment after "/" in the DSN).
+    db_name: sso
+
+  # Driver-level options — the "after-?" segment of the DSN.
+  options:
+    # Driver-level I/O timeouts (distinct from app-level context timeouts).
+    timeout: 5s # establish-connection timeout
+    read_timeout: 30s # per-read I/O timeout
+    write_timeout: 30s # per-write I/O timeout
+
+    # Driver TLS mode. Allowed values:
+    #   "false"        — disabled (local only)
+    #   "true"         — require TLS, verify cert against system roots
+    #   "skip-verify"  — require TLS, skip cert verification (insecure, debug only)
+    #   "preferred"    — try TLS, fall back to plaintext
+    #   <custom-name>  — name of a TLS config registered via mysql.RegisterTLSConfig
+    tls: "false"
+
+    # Extra free-form DSN parameters.
+    # WARNING: do NOT put timeout / read_timeout / write_timeout here — they live
+    # in the fields above and would collide on DSN assembly.
+    # Useful additions for prod: interpolateParams=true, rejectReadOnly=true.
+    params: "parseTime=true&loc=UTC&collation=utf8mb4_unicode_ci"
+
+  # database/sql connection pool, applied to *sql.DB after Open.
+  pool:
+    # Hard cap on simultaneously-open connections.
+    max_open_conns: 10
+
+    # Idle connections kept ready for reuse. Must be <= max_open_conns.
+    max_idle_conns: 5
+
+    # Max age of any single connection; after this it's closed on next return.
+    # Helps avoid surprises from server-side wait_timeout or LB rotations.
+    conn_max_lifetime: 5m
+
+    # Max time a connection may sit idle in the pool before being closed.
+    conn_max_idle_time: 2m
+
+  # Budget for *sql.DB.Close() during graceful shutdown. By the time we close
+  # the pool, the gRPC server has already drained — in-flight queries should
+  # be done. If db.Close() exceeds this budget anyway (stuck connection,
+  # network blip), we abandon it and let the OS reap the conns on exit.
+  shutdown_timeout: 5s
+
+auth:
+  jwt:
+    private_key_path: "keys/ed25519_private.pem"
+    public_key_path: "keys/ed25519_public.pem"
+    issuer: "sso"
+    access_ttl: 15m
+  session:
+    refresh_ttl: 720h
+    refresh_rotation_ttl: 168h
+  bcrypt:
+    cost: 12
+
+audit:
+  enabled: true
+  retention_days: 365
