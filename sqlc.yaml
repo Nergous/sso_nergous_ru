@@ -1,0 +1,76 @@
+version: "2"
+
+# sqlc generates type-safe Go from named SQL queries. We use it for the
+# static portion of the persistence layer (Create/Get/Update/Delete/etc.).
+# Dynamic queries — currently only Repository.List, which builds variable
+# WHERE/ORDER BY based on filters and OrderBy — stay hand-written using
+# database/sql alongside the generated code.
+#
+# Two engines, two outputs:
+#   * mysql / MariaDB — production backend
+#   * sqlite          — test-only backend used by repository_test.go
+#
+# Query content is identical across engines (standard `?` placeholders,
+# basic CRUD); kept in separate directories so sqlc validates each set
+# against its own schema.
+
+sql:
+  - engine: "mysql"
+    schema: "migrations/mariadb"
+    queries: "internal/identity/internal/mariadb/queries"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/identity/internal/mariadb/dbgen"
+        sql_package: "database/sql"
+        emit_interface: false
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_empty_slices: true
+        emit_exact_table_names: false
+        emit_pointers_for_null_types: false
+
+  - engine: "mysql"
+    schema: "migrations/mariadb"
+    queries: "internal/app/internal/mariadb/queries"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/app/internal/mariadb/dbgen"
+        sql_package: "database/sql"
+        emit_interface: false
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_empty_slices: true
+        emit_exact_table_names: false
+        emit_pointers_for_null_types: false
+
+  - engine: "mysql"
+    schema: "migrations/mariadb"
+    queries: "internal/access/internal/mariadb/queries"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/access/internal/mariadb/dbgen"
+        sql_package: "database/sql"
+        emit_interface: false
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_empty_slices: true
+        emit_exact_table_names: false
+        emit_pointers_for_null_types: false
+
+  - engine: "mysql"
+    schema: "migrations/mariadb"
+    queries: "internal/role/internal/mariadb/queries"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/role/internal/mariadb/dbgen"
+        sql_package: "database/sql"
+        emit_interface: false
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_empty_slices: true
+        emit_exact_table_names: false
+        emit_pointers_for_null_types: false
