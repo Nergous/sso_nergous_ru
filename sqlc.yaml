@@ -17,11 +17,11 @@ version: "2"
 sql:
   - engine: "mysql"
     schema: "migrations/mariadb"
-    queries: "internal/identity/internal/mariadb/queries"
+    queries: "internal/modules/identity/internal/mariadb/queries"
     gen:
       go:
         package: "dbgen"
-        out: "internal/identity/internal/mariadb/dbgen"
+        out: "internal/modules/identity/internal/mariadb/dbgen"
         sql_package: "database/sql"
         emit_interface: false
         emit_json_tags: false
@@ -32,11 +32,11 @@ sql:
 
   - engine: "mysql"
     schema: "migrations/mariadb"
-    queries: "internal/app/internal/mariadb/queries"
+    queries: "internal/modules/app/internal/mariadb/queries"
     gen:
       go:
         package: "dbgen"
-        out: "internal/app/internal/mariadb/dbgen"
+        out: "internal/modules/app/internal/mariadb/dbgen"
         sql_package: "database/sql"
         emit_interface: false
         emit_json_tags: false
@@ -47,11 +47,11 @@ sql:
 
   - engine: "mysql"
     schema: "migrations/mariadb"
-    queries: "internal/access/internal/mariadb/queries"
+    queries: "internal/modules/access/internal/mariadb/queries"
     gen:
       go:
         package: "dbgen"
-        out: "internal/access/internal/mariadb/dbgen"
+        out: "internal/modules/access/internal/mariadb/dbgen"
         sql_package: "database/sql"
         emit_interface: false
         emit_json_tags: false
@@ -62,11 +62,11 @@ sql:
 
   - engine: "mysql"
     schema: "migrations/mariadb"
-    queries: "internal/role/internal/mariadb/queries"
+    queries: "internal/modules/role/internal/mariadb/queries"
     gen:
       go:
         package: "dbgen"
-        out: "internal/role/internal/mariadb/dbgen"
+        out: "internal/modules/role/internal/mariadb/dbgen"
         sql_package: "database/sql"
         emit_interface: false
         emit_json_tags: false

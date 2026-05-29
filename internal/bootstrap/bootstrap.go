@@ -21,16 +21,23 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
-	"sso/internal/access"
-	"sso/internal/app"
-	"sso/internal/audit"
-	"sso/internal/auth"
-	"sso/internal/identity"
+	"sso/internal/kernel/actor"
+	"sso/internal/modules/access"
+	"sso/internal/modules/app"
+	"sso/internal/modules/audit"
+	"sso/internal/modules/auth"
+	"sso/internal/modules/identity"
+	"sso/internal/modules/recoverycode"
+	"sso/internal/modules/role"
+	"sso/internal/modules/serviceaccount"
+	"sso/internal/modules/session"
 	"sso/internal/platform/audit/authz"
 	auditbus "sso/internal/platform/audit/bus"
 	"sso/internal/platform/config"
@@ -41,10 +48,9 @@ import (
 	grpcserver "sso/internal/platform/grpc/server"
 	"sso/internal/platform/httpserver"
 	"sso/internal/platform/mariadb"
-	"sso/internal/recoverycode"
-	"sso/internal/role"
-	"sso/internal/serviceaccount"
-	"sso/internal/session"
+	"sso/internal/platform/ratelimit"
+
+	ssoauthv1 "github.com/Nergous/sso_protos/gen/go/sso/auth/v1"
 )
 
 // App is the assembled application. Run blocks until every listener stops
@@ -230,7 +236,17 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	)
 	authInterceptor := grpcauth.NewInterceptor(verifier, sessionRepo, log, publicRPCs)
 
-	srv, err := grpcserver.New(cfg.GRPC, log, authInterceptor.Unary(),
+	// Rate-limit interceptor. Disabled in config → nil → server.New
+	// skips it. Extractors stay in bootstrap because they know proto
+	// types; the ratelimit package itself is proto-free by design.
+	var rateLimitUnary grpc.UnaryServerInterceptor
+	if cfg.RateLimit.Enabled {
+		rl := buildRateLimiter(cfg.RateLimit)
+		rl.Start(ctx)
+		rateLimitUnary = rl.Unary()
+	}
+
+	srv, err := grpcserver.New(cfg.GRPC, log, authInterceptor.Unary(), rateLimitUnary,
 		identityModule.RegisterServer,
 		appModule.RegisterServer,
 		roleModule.RegisterServer,
@@ -251,7 +267,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		// Gateway dials gRPC over loopback. cfg.GRPC.Host may be "0.0.0.0";
 		// rewrite to 127.0.0.1 so we don't accidentally route through an
 		// external interface when an admin binds gRPC widely.
-		gatewayTarget := loopbackTarget(cfg.GRPC)
+		gatewayTarget := loopbackTarget(&cfg.GRPC)
 		httpSrv, err = httpserver.New(ctx, httpserver.Deps{
 			Cfg:        cfg.HTTP,
 			Log:        log,
@@ -278,11 +294,133 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	}, nil
 }
 
+// buildRateLimiter wires the in-memory rate-limit interceptor from
+// config-driven policies and a hard-coded routing table that knows which
+// proto-level extractor produces the key for each defended RPC.
+//
+// Keeping the extractors here (and not inside the ratelimit package)
+// preserves the package's proto-freedom — ratelimit operates on opaque
+// (ctx, req any) values and never imports a generated message type.
+func buildRateLimiter(cfg config.RateLimitConfig) *ratelimit.Interceptor {
+	idle := func(p config.Policy) time.Duration {
+		// Default idle eviction: twice the time to refill the bucket
+		// from empty to burst. Floored at 1m so a low-rps policy still
+		// evicts within a reasonable window.
+		d := time.Duration(2 * float64(p.Burst) / p.Rps * float64(time.Second))
+		if d < time.Minute {
+			d = time.Minute
+		}
+		return d
+	}
+	toPolicy := func(name ratelimit.PolicyName, p config.Policy) ratelimit.Policy {
+		return ratelimit.Policy{
+			Name:      name,
+			RPS:       p.Rps,
+			Burst:     p.Burst,
+			IdleEvict: idle(p),
+		}
+	}
+
+	policies := map[ratelimit.PolicyName]ratelimit.Policy{
+		ratelimit.LoginPerIP:            toPolicy(ratelimit.LoginPerIP, cfg.Policies.LoginPerIP),
+		ratelimit.LoginPerUsername:      toPolicy(ratelimit.LoginPerUsername, cfg.Policies.LoginPerUsername),
+		ratelimit.ResetPerIP:            toPolicy(ratelimit.ResetPerIP, cfg.Policies.ResetPerIP),
+		ratelimit.ResetPerEmail:         toPolicy(ratelimit.ResetPerEmail, cfg.Policies.ResetPerEmail),
+		ratelimit.ServiceAuthPerClient:  toPolicy(ratelimit.ServiceAuthPerClient, cfg.Policies.ServiceAuthPerClient),
+		ratelimit.ChangePasswordPerUser: toPolicy(ratelimit.ChangePasswordPerUser, cfg.Policies.ChangePasswordPerUser),
+	}
+
+	bindings := map[string][]ratelimit.MethodLimit{
+		"/sso.auth.v1.AuthService/Login": {
+			{Policy: ratelimit.LoginPerIP, Extractor: extractPeerIP},
+			{Policy: ratelimit.LoginPerUsername, Extractor: extractLoginIdentifier},
+		},
+		"/sso.auth.v1.AuthService/ResetPasswordWithRecoveryCode": {
+			{Policy: ratelimit.ResetPerIP, Extractor: extractPeerIP},
+			{Policy: ratelimit.ResetPerEmail, Extractor: extractResetIdentifier},
+		},
+		"/sso.auth.v1.AuthService/AuthenticateServiceAccount": {
+			{Policy: ratelimit.ServiceAuthPerClient, Extractor: extractServiceAccountID},
+		},
+		"/sso.auth.v1.AuthService/ChangePassword": {
+			{Policy: ratelimit.ChangePasswordPerUser, Extractor: extractActorID},
+		},
+	}
+
+	return ratelimit.New(policies, bindings, cfg.CleanupInterval)
+}
+
+// extractPeerIP keys on the gRPC peer IP. ok=false means the peer has
+// no Addr (in-process test), in which case the policy is skipped rather
+// than failing the request.
+func extractPeerIP(ctx context.Context, _ any) (ratelimit.Key, bool) {
+	ip := grpcauth.PeerIP(ctx)
+	if ip == "" {
+		return "", false
+	}
+	return ratelimit.Key(ip), true
+}
+
+// extractLoginIdentifier pulls the login key from LoginRequest payload
+// (email if present, else username). Lower-cased and trimmed so the
+// same identity hashes to one bucket regardless of caller casing.
+func extractLoginIdentifier(_ context.Context, req any) (ratelimit.Key, bool) {
+	r, ok := req.(*ssoauthv1.LoginRequest)
+	if !ok {
+		return "", false
+	}
+	return normalizedIdentifier(r.GetEmail(), r.GetUsername())
+}
+
+func extractResetIdentifier(_ context.Context, req any) (ratelimit.Key, bool) {
+	r, ok := req.(*ssoauthv1.ResetPasswordWithRecoveryCodeRequest)
+	if !ok {
+		return "", false
+	}
+	return normalizedIdentifier(r.GetEmail(), r.GetUsername())
+}
+
+func extractServiceAccountID(_ context.Context, req any) (ratelimit.Key, bool) {
+	r, ok := req.(*ssoauthv1.ServiceAccountAuthRequest)
+	if !ok {
+		return "", false
+	}
+	id := strings.TrimSpace(r.GetServiceAccountId())
+	if id == "" {
+		return "", false
+	}
+	return ratelimit.Key(id), true
+}
+
+// extractActorID pulls the authenticated subject ID. For ChangePassword
+// the auth interceptor has already injected the actor by the time this
+// runs (it's a protected RPC), so missing actor here is a real failure
+// of the upstream chain — we skip the policy rather than reject, since
+// auth will reject the request itself.
+func extractActorID(ctx context.Context, _ any) (ratelimit.Key, bool) {
+	a, ok := actor.From(ctx)
+	if !ok || a.ID == "" {
+		return "", false
+	}
+	return ratelimit.Key(a.ID), true
+}
+
+func normalizedIdentifier(email, username string) (ratelimit.Key, bool) {
+	id := strings.ToLower(strings.TrimSpace(email))
+	if id == "" {
+		id = strings.ToLower(strings.TrimSpace(username))
+	}
+	if id == "" {
+		return "", false
+	}
+	return ratelimit.Key(id), true
+}
+
 // loopbackTarget picks the address the in-process gateway uses to dial the
 // gRPC server. If gRPC is bound to a wildcard ("0.0.0.0" / "::"), we connect
 // over the loopback interface anyway — the traffic should never leave the
 // host even if the listener is publicly exposed.
-func loopbackTarget(cfg config.GRPCConfig) string {
+func loopbackTarget(cfg *config.GRPCConfig) string {
 	host := cfg.Host
 	switch host {
 	case "0.0.0.0", "":
@@ -290,7 +428,7 @@ func loopbackTarget(cfg config.GRPCConfig) string {
 	case "::", "[::]":
 		host = "[::1]"
 	}
-	return (config.GRPCConfig{Host: host, Port: cfg.Port}).Address()
+	return (&config.GRPCConfig{Host: host, Port: cfg.Port}).Address()
 }
 
 // Run starts every configured listener (gRPC always, HTTP if enabled) and

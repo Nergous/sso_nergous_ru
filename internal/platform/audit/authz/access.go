@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
-	"sso/internal/access"
+	"sso/internal/modules/access"
 	"sso/internal/kernel/actor"
 	"sync/atomic"
 )

@@ -31,15 +31,19 @@ type Server struct {
 // internally so the wiring stays a single line.
 type Registrar func(*grpc.Server)
 
-// New builds the gRPC server with the standard interceptor chain. The
-// optional unaryAuth interceptor (nil for tests / bootstrap that hasn't
-// wired auth yet) is inserted between `recovery` and `validation` —
-// after recovery so a panic inside auth is captured, before validation
-// so authenticated handlers can rely on actor presence by the time
-// validators run.
+// New builds the gRPC server with the standard interceptor chain. Both
+// `unaryAuth` and `unaryRateLimit` are optional (nil-tolerant for tests
+// / bootstraps that haven't wired them yet). Order matters:
+//
+//	requestID → logging → recovery → auth → ratelimit → validation
+//
+// Auth precedes ratelimit so policies can key on the authenticated
+// subject. Ratelimit precedes validation so we don't burn CPU on
+// protobuf validation for a request we're about to reject anyway.
 func New(
 	cfg config.GRPCConfig, log *slog.Logger,
 	unaryAuth grpc.UnaryServerInterceptor,
+	unaryRateLimit grpc.UnaryServerInterceptor,
 	registrars ...Registrar,
 ) (*Server, error) {
 	unary := []grpc.UnaryServerInterceptor{
@@ -49,6 +53,9 @@ func New(
 	}
 	if unaryAuth != nil {
 		unary = append(unary, unaryAuth)
+	}
+	if unaryRateLimit != nil {
+		unary = append(unary, unaryRateLimit)
 	}
 	unary = append(unary, unaryValidation())
 
@@ -136,4 +143,3 @@ func unaryRecovery(log *slog.Logger) grpc.UnaryServerInterceptor {
 		return handler(ctx, req)
 	}
 }
-

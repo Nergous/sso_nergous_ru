@@ -187,3 +187,14 @@ auth:
 audit:
   enabled: true
   retention_days: 365
+
+rate_limit:
+  enabled: true
+  cleanup_interval: 5m
+  policies:
+    login_per_ip: { rps: 0.166, burst: 10 }
+    login_per_username: { rps: 0.083, burst: 5 }
+    reset_per_ip: { rps: 0.05, burst: 3 }
+    reset_per_email: { rps: 0.05, burst: 3 }
+    service_auth_per_client: { rps: 0.5, burst: 30 }
+    change_password_per_user: { rps: 0.083, burst: 5 }

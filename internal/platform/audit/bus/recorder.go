@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"sso/internal/audit"
+	"sso/internal/modules/audit"
 )
 
 // RecorderEmitter is an in-memory audit.Emitter for tests. Every

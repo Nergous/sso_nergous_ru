@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sso/internal/kernel/actor"
 	"sso/internal/platform/crypto/jwt"
-	"sso/internal/session"
+	"sso/internal/modules/session"
 	"strings"
 	"time"
 

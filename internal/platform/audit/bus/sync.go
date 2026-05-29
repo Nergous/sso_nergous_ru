@@ -3,7 +3,7 @@ package auditbus
 import (
 	"context"
 	"log/slog"
-	"sso/internal/audit"
+	"sso/internal/modules/audit"
 )
 
 type SyncEmitter struct {

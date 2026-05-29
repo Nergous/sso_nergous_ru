@@ -11,7 +11,7 @@ package auditbus
 import (
 	"strings"
 
-	"sso/internal/audit"
+	"sso/internal/modules/audit"
 )
 
 // RedactedPlaceholder is the value that replaces a blocked metadata

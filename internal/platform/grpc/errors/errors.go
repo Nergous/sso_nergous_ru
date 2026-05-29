@@ -16,9 +16,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// errorDomain is attached to every google.rpc.ErrorInfo emitted by the
-// SSO surface. Documented in sso/common/v1/errors.proto.
-const errorDomain = "sso.nergous.ru"
+// ErrorDomain is attached to every google.rpc.ErrorInfo emitted by the
+// SSO surface. Documented in sso/common/v1/errors.proto. Exported so
+// adjacent packages (e.g. ratelimit) that build their own status objects
+// without going through StatusWithReason can reuse the same domain value.
+const ErrorDomain = "sso.nergous.ru"
 
 // ValidationError is a deprecated alias retained while in-flight
 // migrations finish. New code should use validation.Error directly.
@@ -34,7 +36,7 @@ func StatusWithReason(code codes.Code, reason ssocommonv1.ErrorReason, msg strin
 	st := status.New(code, msg)
 	withDetails, err := st.WithDetails(&errdetails.ErrorInfo{
 		Reason: reason.String(),
-		Domain: errorDomain,
+		Domain: ErrorDomain,
 	})
 	if err != nil {
 		return st.Err()
@@ -92,7 +94,7 @@ func StatusWithValidation(verr *validation.Error) error {
 	withDetails, err := st.WithDetails(
 		&errdetails.ErrorInfo{
 			Reason: ssocommonv1.ErrorReason_ERROR_REASON_VALIDATION_FAILED.String(),
-			Domain: errorDomain,
+			Domain: ErrorDomain,
 		},
 		&errdetails.BadRequest{
 			FieldViolations: []*errdetails.BadRequest_FieldViolation{{
