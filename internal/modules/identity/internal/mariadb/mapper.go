@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"time"
 
+	"sso/internal/kernel/etag"
 	"sso/internal/modules/identity/internal/domain"
 	"sso/internal/modules/identity/internal/mariadb/dbgen"
-	"sso/internal/kernel/etag"
 )
 
 // dbgenToDomain hydrates a domain.User from a freshly-scanned sqlc row.
@@ -26,20 +26,27 @@ func dbgenToDomain(u dbgen.User) *domain.User {
 		passwordHash = []byte(u.PasswordHash.String)
 	}
 
+	var lockoutUntil time.Time
+	if u.LockoutUntil.Valid {
+		lockoutUntil = u.LockoutUntil.Time
+	}
+
 	return domain.RestoreUser(domain.RestoreUserParams{
-		ID:           domain.UserID(u.ID),
-		Email:        u.Email,
-		Username:     u.Username,
-		DisplayName:  u.DisplayName,
-		PasswordHash: passwordHash,
-		AvatarURL:    avatar,
-		Locale:       u.Locale,
-		Timezone:     u.Timezone,
-		Status:       domain.UserStatus(u.Status),
-		Etag:         etag.Etag(u.Etag),
-		CreatedAt:    u.CreatedAt,
-		UpdatedAt:    u.UpdatedAt,
-		LastLoginAt:  lastLogin,
+		ID:                  domain.UserID(u.ID),
+		Email:               u.Email,
+		Username:            u.Username,
+		DisplayName:         u.DisplayName,
+		PasswordHash:        passwordHash,
+		AvatarURL:           avatar,
+		Locale:              u.Locale,
+		Timezone:            u.Timezone,
+		Status:              domain.UserStatus(u.Status),
+		Etag:                etag.Etag(u.Etag),
+		CreatedAt:           u.CreatedAt,
+		UpdatedAt:           u.UpdatedAt,
+		LastLoginAt:         lastLogin,
+		FailedLoginAttempts: int(u.FailedLoginAttempts),
+		LockoutUntil:        lockoutUntil,
 	})
 }
 
