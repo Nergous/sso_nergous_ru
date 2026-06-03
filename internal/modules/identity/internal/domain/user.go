@@ -314,6 +314,16 @@ func (u *User) ClearPassword(now time.Time) error {
 	return nil
 }
 
+func (u *User) IsLocked() bool {
+	lockedUntil := u.LockoutUntil
+
+	if lockedUntil.Before(time.Now()) {
+		return true
+	}
+
+	return false
+}
+
 func (u *User) bumpVersion(now time.Time) {
 	u.updatedAt = now
 	u.etag = etag.New()
