@@ -74,3 +74,6 @@ WHERE id = ?;
 UPDATE users SET
     failed_login_attempts = 0, lockout_until = NULL
 WHERE id = ?;
+
+-- name: GetFailedLoginAttempts :one
+SELECT failed_login_attempts FROM users WHERE id = ?;

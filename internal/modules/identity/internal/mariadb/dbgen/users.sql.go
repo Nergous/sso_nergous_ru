@@ -91,6 +91,17 @@ func (q *Queries) DeleteUserWithEtag(ctx context.Context, arg DeleteUserWithEtag
 	return q.db.ExecContext(ctx, deleteUserWithEtag, arg.ID, arg.Etag)
 }
 
+const getFailedLoginAttempts = `-- name: GetFailedLoginAttempts :one
+SELECT failed_login_attempts FROM users WHERE id = ?
+`
+
+func (q *Queries) GetFailedLoginAttempts(ctx context.Context, id string) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getFailedLoginAttempts, id)
+	var failed_login_attempts int32
+	err := row.Scan(&failed_login_attempts)
+	return failed_login_attempts, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, username, password_hash, display_name, avatar_url, locale, timezone, status, etag, created_at, updated_at, last_login_at, failed_login_attempts, lockout_until FROM users
 WHERE email = ?
