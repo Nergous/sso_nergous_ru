@@ -92,9 +92,7 @@ func (q *Queries) DeleteUserWithEtag(ctx context.Context, arg DeleteUserWithEtag
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, username, password_hash, display_name, avatar_url, locale,
-       timezone, status, etag, created_at, updated_at, last_login_at
-FROM users
+SELECT id, email, username, password_hash, display_name, avatar_url, locale, timezone, status, etag, created_at, updated_at, last_login_at, failed_login_attempts, lockout_until FROM users
 WHERE email = ?
 `
 
@@ -118,14 +116,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.FailedLoginAttempts,
+		&i.LockoutUntil,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, username, password_hash, display_name, avatar_url, locale,
-       timezone, status, etag, created_at, updated_at, last_login_at
-FROM users
+SELECT id, email, username, password_hash, display_name, avatar_url, locale, timezone, status, etag, created_at, updated_at, last_login_at, failed_login_attempts, lockout_until FROM users
 WHERE id = ?
 `
 
@@ -146,14 +144,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.FailedLoginAttempts,
+		&i.LockoutUntil,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, email, username, password_hash, display_name, avatar_url, locale,
-       timezone, status, etag, created_at, updated_at, last_login_at
-FROM users
+SELECT id, email, username, password_hash, display_name, avatar_url, locale, timezone, status, etag, created_at, updated_at, last_login_at, failed_login_attempts, lockout_until FROM users
 WHERE username = ?
 `
 
@@ -175,8 +173,45 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.FailedLoginAttempts,
+		&i.LockoutUntil,
 	)
 	return i, err
+}
+
+const incrementFailedLogins = `-- name: IncrementFailedLogins :execresult
+UPDATE users SET
+    failed_login_attempts = failed_login_attempts + 1
+WHERE id = ?
+`
+
+func (q *Queries) IncrementFailedLogins(ctx context.Context, id string) (sql.Result, error) {
+	return q.db.ExecContext(ctx, incrementFailedLogins, id)
+}
+
+const lockUser = `-- name: LockUser :execresult
+UPDATE users SET
+    lockout_until = ?, failed_login_attempts = 0
+WHERE id = ?
+`
+
+type LockUserParams struct {
+	LockoutUntil sql.NullTime
+	ID           string
+}
+
+func (q *Queries) LockUser(ctx context.Context, arg LockUserParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, lockUser, arg.LockoutUntil, arg.ID)
+}
+
+const resetLoginFailures = `-- name: ResetLoginFailures :execresult
+UPDATE users SET
+    failed_login_attempts = 0, lockout_until = NULL
+WHERE id = ?
+`
+
+func (q *Queries) ResetLoginFailures(ctx context.Context, id string) (sql.Result, error) {
+	return q.db.ExecContext(ctx, resetLoginFailures, id)
 }
 
 const updateUser = `-- name: UpdateUser :execresult

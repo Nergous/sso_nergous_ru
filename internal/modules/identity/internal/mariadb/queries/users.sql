@@ -9,25 +9,19 @@ INSERT INTO users
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetUserByID :one
-SELECT id, email, username, password_hash, display_name, avatar_url, locale,
-       timezone, status, etag, created_at, updated_at, last_login_at
-FROM users
+SELECT * FROM users
 WHERE id = ?;
 
 -- name: GetUserByEmail :one
 -- Used by AuthService.Login when the caller authenticates by email.
 -- Returns the full row including password_hash so the use-case can run
 -- bcrypt verification without a follow-up Get.
-SELECT id, email, username, password_hash, display_name, avatar_url, locale,
-       timezone, status, etag, created_at, updated_at, last_login_at
-FROM users
+SELECT * FROM users
 WHERE email = ?;
 
 -- name: GetUserByUsername :one
 -- Used by AuthService.Login when the caller authenticates by username.
-SELECT id, email, username, password_hash, display_name, avatar_url, locale,
-       timezone, status, etag, created_at, updated_at, last_login_at
-FROM users
+SELECT * FROM users
 WHERE username = ?;
 
 -- name: UpdateUserWithEtag :execresult
@@ -66,17 +60,17 @@ UPDATE users SET
     last_login_at = ?
 WHERE id = ?;
 
--- -- name: IncrementFailedLogins :execresult
--- UPDATE users SET
---     failed_login_attempts = failed_login_attempts + 1
--- WHERE id = ?;
+-- name: IncrementFailedLogins :execresult
+UPDATE users SET
+    failed_login_attempts = failed_login_attempts + 1
+WHERE id = ?;
 
--- -- name: LockUser :execresult
--- UPDATE users SET
---     lockout_until = ?, failed_login_attempts = 0
--- WHERE id = ?;
+-- name: LockUser :execresult
+UPDATE users SET
+    lockout_until = ?, failed_login_attempts = 0
+WHERE id = ?;
 
--- -- name: ResetLoginFailures :execresult
--- UPDATE users SET
---     failed_login_attempts = 0, lockout_until = NULL
--- WHERE id = ?;
+-- name: ResetLoginFailures :execresult
+UPDATE users SET
+    failed_login_attempts = 0, lockout_until = NULL
+WHERE id = ?;

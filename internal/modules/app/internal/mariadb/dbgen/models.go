@@ -100,17 +100,19 @@ type Session struct {
 }
 
 type User struct {
-	ID           string
-	Email        string
-	Username     string
-	PasswordHash sql.NullString
-	DisplayName  string
-	AvatarUrl    sql.NullString
-	Locale       string
-	Timezone     string
-	Status       uint8
-	Etag         string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	LastLoginAt  sql.NullTime
+	ID                  string
+	Email               string
+	Username            string
+	PasswordHash        sql.NullString
+	DisplayName         string
+	AvatarUrl           sql.NullString
+	Locale              string
+	Timezone            string
+	Status              uint8
+	Etag                string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	LastLoginAt         sql.NullTime
+	FailedLoginAttempts int32
+	LockoutUntil        sql.NullTime
 }

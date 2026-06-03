@@ -60,21 +60,22 @@ func (u UserID) String() string { return string(u) }
 //   service layer always goes through ApplyPatch.
 
 type User struct {
-	id           UserID
-	status       UserStatus
-	etag         etag.Etag
-	createdAt    time.Time
-	updatedAt    time.Time
-	passwordHash []byte // nil/empty = no password set (admin-created user awaiting reset)
+	id                  UserID
+	status              UserStatus
+	etag                etag.Etag
+	createdAt           time.Time
+	updatedAt           time.Time
+	passwordHash        []byte // nil/empty = no password set (admin-created user awaiting reset)
+	failedLoginAttempts int
 
-	Email       string
-	Username    string
-	DisplayName string
-	AvatarURL   string // empty = absent
-	Locale      string
-	Timezone    string
-	LastLoginAt time.Time // zero = never logged in
-
+	Email        string
+	Username     string
+	DisplayName  string
+	AvatarURL    string // empty = absent
+	Locale       string
+	Timezone     string
+	LastLoginAt  time.Time // zero = never logged in
+	LockoutUntil time.Time // null = no lockout
 }
 
 // NewUserParams carries the values supplied by the CreateUser use-case.
@@ -118,47 +119,52 @@ func NewUser(p NewUserParams) *User {
 
 // RestoreUserParams carries the full row read back from the repository.
 type RestoreUserParams struct {
-	ID           UserID
-	Email        string
-	Username     string
-	DisplayName  string
-	AvatarURL    string
-	Locale       string
-	Timezone     string
-	PasswordHash []byte
-	Status       UserStatus
-	Etag         etag.Etag
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	LastLoginAt  time.Time
+	ID                  UserID
+	Email               string
+	Username            string
+	DisplayName         string
+	AvatarURL           string
+	Locale              string
+	Timezone            string
+	PasswordHash        []byte
+	Status              UserStatus
+	Etag                etag.Etag
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	LastLoginAt         time.Time
+	FailedLoginAttempts int
+	LockoutUntil        time.Time
 }
 
 // RestoreUser rebuilds a User from a persisted row. No validation: the row
 // is trusted (it was written by NewUser/ApplyPatch earlier).
 func RestoreUser(p RestoreUserParams) *User {
 	return &User{
-		id:           p.ID,
-		status:       p.Status,
-		etag:         p.Etag,
-		createdAt:    p.CreatedAt,
-		updatedAt:    p.UpdatedAt,
-		passwordHash: p.PasswordHash,
-		Email:        p.Email,
-		Username:     p.Username,
-		DisplayName:  p.DisplayName,
-		AvatarURL:    p.AvatarURL,
-		Locale:       p.Locale,
-		Timezone:     p.Timezone,
-		LastLoginAt:  p.LastLoginAt,
+		id:                  p.ID,
+		status:              p.Status,
+		etag:                p.Etag,
+		createdAt:           p.CreatedAt,
+		updatedAt:           p.UpdatedAt,
+		passwordHash:        p.PasswordHash,
+		Email:               p.Email,
+		Username:            p.Username,
+		DisplayName:         p.DisplayName,
+		AvatarURL:           p.AvatarURL,
+		Locale:              p.Locale,
+		Timezone:            p.Timezone,
+		LastLoginAt:         p.LastLoginAt,
+		failedLoginAttempts: p.FailedLoginAttempts,
+		LockoutUntil:        p.LockoutUntil,
 	}
 }
 
 // Read-only accessors for the unexported invariant-bearing fields.
-func (u *User) ID() UserID           { return u.id }
-func (u *User) Status() UserStatus   { return u.status }
-func (u *User) Etag() etag.Etag      { return u.etag }
-func (u *User) CreatedAt() time.Time { return u.createdAt }
-func (u *User) UpdatedAt() time.Time { return u.updatedAt }
+func (u *User) ID() UserID               { return u.id }
+func (u *User) Status() UserStatus       { return u.status }
+func (u *User) Etag() etag.Etag          { return u.etag }
+func (u *User) CreatedAt() time.Time     { return u.createdAt }
+func (u *User) UpdatedAt() time.Time     { return u.updatedAt }
+func (u *User) FailedLoginAttempts() int { return u.failedLoginAttempts }
 
 // PasswordHash returns the stored bcrypt hash. nil/empty means the user
 // has no password set yet (admin-created account). Callers that perform
