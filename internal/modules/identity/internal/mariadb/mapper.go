@@ -1,9 +1,9 @@
 package mariadb
 
 import (
-	"database/sql"
 	"time"
 
+	"sso/internal/kernel/dbutil"
 	"sso/internal/kernel/etag"
 	"sso/internal/modules/identity/internal/domain"
 	"sso/internal/modules/identity/internal/mariadb/dbgen"
@@ -57,15 +57,15 @@ func toCreateParams(u *domain.User) dbgen.CreateUserParams {
 		Email:        u.Email,
 		Username:     u.Username,
 		DisplayName:  u.DisplayName,
-		PasswordHash: passwordHashToDB(u.PasswordHash()),
-		AvatarUrl:    avatarToDB(u.AvatarURL),
+		PasswordHash: dbutil.BytesToNullString(u.PasswordHash()),
+		AvatarUrl:    dbutil.StringToNullString(u.AvatarURL),
 		Locale:       u.Locale,
 		Timezone:     u.Timezone,
 		Status:       uint8(u.Status()),
 		Etag:         u.Etag().String(),
 		CreatedAt:    u.CreatedAt(),
 		UpdatedAt:    u.UpdatedAt(),
-		LastLoginAt:  lastLoginToDB(u.LastLoginAt),
+		LastLoginAt:  dbutil.TimeToNullTime(u.LastLoginAt),
 	}
 }
 
@@ -76,14 +76,14 @@ func toUpdateParams(u *domain.User) dbgen.UpdateUserParams {
 		Email:        u.Email,
 		Username:     u.Username,
 		DisplayName:  u.DisplayName,
-		PasswordHash: passwordHashToDB(u.PasswordHash()),
-		AvatarUrl:    avatarToDB(u.AvatarURL),
+		PasswordHash: dbutil.BytesToNullString(u.PasswordHash()),
+		AvatarUrl:    dbutil.StringToNullString(u.AvatarURL),
 		Locale:       u.Locale,
 		Timezone:     u.Timezone,
 		Status:       uint8(u.Status()),
 		Etag:         u.Etag().String(),
 		UpdatedAt:    u.UpdatedAt(),
-		LastLoginAt:  lastLoginToDB(u.LastLoginAt),
+		LastLoginAt:  dbutil.TimeToNullTime(u.LastLoginAt),
 		ID:           u.ID().String(),
 	}
 }
@@ -96,45 +96,24 @@ func toUpdateWithEtagParams(u *domain.User, expectedEtag etag.Etag) dbgen.Update
 		Email:        u.Email,
 		Username:     u.Username,
 		DisplayName:  u.DisplayName,
-		PasswordHash: passwordHashToDB(u.PasswordHash()),
-		AvatarUrl:    avatarToDB(u.AvatarURL),
+		PasswordHash: dbutil.BytesToNullString(u.PasswordHash()),
+		AvatarUrl:    dbutil.StringToNullString(u.AvatarURL),
 		Locale:       u.Locale,
 		Timezone:     u.Timezone,
 		Status:       uint8(u.Status()),
 		Etag:         u.Etag().String(),
 		UpdatedAt:    u.UpdatedAt(),
-		LastLoginAt:  lastLoginToDB(u.LastLoginAt),
+		LastLoginAt:  dbutil.TimeToNullTime(u.LastLoginAt),
 		ID:           u.ID().String(),
 		Etag_2:       expectedEtag.String(),
 	}
 }
 
-// avatarToDB maps the empty domain value to SQL NULL — canonical "absent"
-// for a proto3 optional field.
-func avatarToDB(s string) sql.NullString {
-	if s == "" {
-		return sql.NullString{}
+func toLockUserParams(id domain.UserID, until time.Time) dbgen.LockUserParams {
+	return dbgen.LockUserParams{
+		LockoutUntil: dbutil.TimeToNullTime(until),
+		ID:           id.String(),
 	}
-	return sql.NullString{String: s, Valid: true}
-}
-
-// lastLoginToDB lifts the never-logged-in zero time to SQL NULL.
-func lastLoginToDB(t time.Time) sql.NullTime {
-	if t.IsZero() {
-		return sql.NullTime{}
-	}
-	return sql.NullTime{Time: t, Valid: true}
-}
-
-// passwordHashToDB lifts an empty/nil hash to SQL NULL — a user with no
-// password set on file. sqlc maps the nullable VARBINARY column to
-// sql.NullString; the bcrypt output (`$2a$12$...`) is plain ASCII so the
-// string round-trip is byte-exact.
-func passwordHashToDB(h []byte) sql.NullString {
-	if len(h) == 0 {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: string(h), Valid: true}
 }
 
 // toUpdatePasswordWithEtagParams flattens a domain.User + expected etag
@@ -144,7 +123,7 @@ func passwordHashToDB(h []byte) sql.NullString {
 // the row alone.
 func toUpdatePasswordWithEtagParams(u *domain.User, expectedEtag etag.Etag) dbgen.UpdateUserPasswordWithEtagParams {
 	return dbgen.UpdateUserPasswordWithEtagParams{
-		PasswordHash: passwordHashToDB(u.PasswordHash()),
+		PasswordHash: dbutil.BytesToNullString(u.PasswordHash()),
 		Etag:         u.Etag().String(),
 		UpdatedAt:    u.UpdatedAt(),
 		ID:           u.ID().String(),
@@ -154,7 +133,7 @@ func toUpdatePasswordWithEtagParams(u *domain.User, expectedEtag etag.Etag) dbge
 
 func toUpdateLastLoginAtParams(id domain.UserID, now time.Time) dbgen.UpdateUserLastLoginAtParams {
 	return dbgen.UpdateUserLastLoginAtParams{
-		LastLoginAt: lastLoginToDB(now),
+		LastLoginAt: dbutil.TimeToNullTime(now),
 		ID:          id.String(),
 	}
 }

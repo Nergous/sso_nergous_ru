@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sso/internal/kernel/etag"
 	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
@@ -95,4 +96,25 @@ func Discriminate(
 func EscapeLike(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return r.Replace(s)
+}
+
+func StringToNullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+func TimeToNullTime(t time.Time) sql.NullTime {
+	if t.IsZero() {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Time: t, Valid: true}
+}
+
+func BytesToNullString(h []byte) sql.NullString {
+	if len(h) == 0 {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: string(h), Valid: true}
 }

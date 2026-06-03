@@ -15,10 +15,10 @@ import (
 	"fmt"
 	"time"
 
-	"sso/internal/modules/identity/internal/domain"
-	"sso/internal/modules/identity/internal/mariadb/dbgen"
 	"sso/internal/kernel/dbutil"
 	"sso/internal/kernel/etag"
+	"sso/internal/modules/identity/internal/domain"
+	"sso/internal/modules/identity/internal/mariadb/dbgen"
 )
 
 // Repository persists identity aggregates in MariaDB.
@@ -98,6 +98,17 @@ func (r *Repository) GetByUsername(ctx context.Context, username string) (*domai
 		return nil, fmt.Errorf("identity repo: get_by_username: %w", err)
 	}
 	return dbgenToDomain(row), nil
+}
+
+func (r *Repository) GetFailedLoginAttempts(ctx context.Context, id domain.UserID) (int, error) {
+	count, err := r.q.GetFailedLoginAttempts(ctx, id.String())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, domain.ErrUserNotFound
+		}
+		return 0, fmt.Errorf("identity repo: get_failed_login_attempts: %w", err)
+	}
+	return int(count), nil
 }
 
 // ----------------------------------------------------------------------------
@@ -183,14 +194,55 @@ func (r *Repository) UpdateLastLoginAt(ctx context.Context, id domain.UserID, no
 	if err != nil {
 		return fmt.Errorf("identity repo: update_last_login: rows_affected: %w", err)
 	}
-	if rows == 1 {
+	if rows == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *Repository) IncrementFailedLogins(ctx context.Context, id domain.UserID) error {
+	res, err := r.q.IncrementFailedLogins(ctx, id.String())
+	if err != nil {
+		return fmt.Errorf("identity repo: increment_failed_logins: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("identity repo: increment_failed_logins: rows_affected: %w", err)
+	}
+	if rows == 0 {
 		return nil
 	}
-	return dbutil.Discriminate(ctx, "",
-		func(ctx context.Context) (int64, error) {
-			return r.q.CountUserByID(ctx, id.String())
-		},
-		domain.ErrUserNotFound, domain.ErrEtagMismatch)
+	return nil
+}
+
+func (r *Repository) LockUser(ctx context.Context, id domain.UserID, until time.Time) error {
+	res, err := r.q.LockUser(ctx, toLockUserParams(id, until))
+	if err != nil {
+		return fmt.Errorf("identity repo: lock_user: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("identity repo: lock_user: rows_affected: %w", err)
+	}
+	if rows == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *Repository) ResetLoginFailures(ctx context.Context, id domain.UserID) error {
+	res, err := r.q.ResetLoginFailures(ctx, id.String())
+	if err != nil {
+		return fmt.Errorf("identity repo: reset_login_failures: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("identity repo: reset_login_failures: rows_affected: %w", err)
+	}
+	if rows == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------------
