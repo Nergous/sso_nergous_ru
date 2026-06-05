@@ -9,14 +9,9 @@ const (
 	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 	corsAllowHeaders = "Authorization, Content-Type, X-Request-Id, Grpc-Metadata-*"
 	corsExposeHeader = "X-Request-Id"
-	corsMaxAge       = "600" // 10m — bounds preflight TTL without being chatty
+	corsMaxAge       = "600"
 )
 
-// corsMiddleware applies a permissive-but-explicit CORS policy. Origins are
-// matched against allowedOrigins; "*" in that list acts as a wildcard but
-// disables Access-Control-Allow-Credentials per the CORS spec. A nil/empty
-// list means CORS is effectively off: the middleware still handles preflight
-// for parity but never emits Allow-Origin.
 func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	wildcard := false
 	exact := make(map[string]struct{}, len(allowedOrigins))
@@ -55,9 +50,6 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 				} else {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
-					// Vary tells caches that the response depends on Origin,
-					// so a CDN doesn't serve a response intended for origin A
-					// to a request from origin B.
 					w.Header().Add("Vary", "Origin")
 				}
 				w.Header().Set("Access-Control-Expose-Headers", corsExposeHeader)
@@ -75,9 +67,6 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					w.WriteHeader(http.StatusNoContent)
 					return
 				}
-				// Disallowed preflight: do not echo any Allow-* headers; the
-				// browser will block the actual request. 204 keeps the wire
-				// shape standard.
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}

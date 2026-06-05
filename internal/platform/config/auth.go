@@ -11,6 +11,7 @@ type AuthConfig struct {
 	JWT     JWTConfig     `yaml:"jwt"`
 	Session SessionConfig `yaml:"session"`
 	Bcrypt  BcryptConfig  `yaml:"bcrypt"`
+	Lockout LockoutConfig `yaml:"lockout"`
 }
 
 type JWTConfig struct {
@@ -27,6 +28,11 @@ type SessionConfig struct {
 
 type BcryptConfig struct {
 	Cost int `yaml:"cost" env:"BCRYPT_COST" env-default:"12"`
+}
+
+type LockoutConfig struct {
+	Threshold int           `yaml:"threshold" env:"LOCKOUT_THRESHOLD" env-default:"5"`
+	Duration  time.Duration `yaml:"duration"  env:"LOCKOUT_DURATION"  env-default:"15m"`
 }
 
 func (c *AuthConfig) validate() error {
@@ -55,6 +61,13 @@ func (c *AuthConfig) validate() error {
 
 	if _, err := os.Stat(c.JWT.PrivateKeyPath); err != nil {
 		errs = append(errs, fmt.Errorf("auth.jwt.private_key_path %q: %w", c.JWT.PrivateKeyPath, err))
+	}
+
+	if c.Lockout.Threshold < 0 {
+		errs = append(errs, fmt.Errorf("auth.lockout.threshold: must be >= 0"))
+	}
+	if c.Lockout.Threshold > 0 && c.Lockout.Duration <= 0 {
+		errs = append(errs, fmt.Errorf("auth.lockout.duration: must be > 0"))
 	}
 
 	return errors.Join(errs...)

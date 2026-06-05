@@ -13,12 +13,16 @@ import (
 // grpc-gateway. When Enabled=false the HTTP listener is not started and the
 // process serves gRPC only. CORS and TLS are independent subsections.
 type HTTPConfig struct {
-	Enabled         bool          `yaml:"enabled" env:"HTTP_ENABLED" env-default:"true"`
-	Host            string        `yaml:"host" env:"HTTP_HOST" env-default:"127.0.0.1"`
-	Port            int           `yaml:"port" env:"HTTP_PORT" env-default:"8080"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env:"HTTP_SHUTDOWN_TIMEOUT" env-default:"30s"`
-	CORS            CORSConfig    `yaml:"cors"`
-	TLS             HTTPTLSConfig `yaml:"tls"`
+	Enabled           bool          `yaml:"enabled" env:"HTTP_ENABLED" env-default:"true"`
+	Host              string        `yaml:"host" env:"HTTP_HOST" env-default:"127.0.0.1"`
+	Port              int           `yaml:"port" env:"HTTP_PORT" env-default:"8080"`
+	ShutdownTimeout   time.Duration `yaml:"shutdown_timeout" env:"HTTP_SHUTDOWN_TIMEOUT" env-default:"30s"`
+	WriteTimeout      time.Duration `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"30s"`
+	ReadTimeout       time.Duration `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"30s"`
+	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout" env:"HTTP_READ_HEADER_TIMEOUT" env-default:"30s"`
+	IdleTimeout       time.Duration `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"60s"`
+	CORS              CORSConfig    `yaml:"cors"`
+	TLS               HTTPTLSConfig `yaml:"tls"`
 }
 
 // CORSConfig configures the HTTP CORS middleware. AllowedOrigins entries are

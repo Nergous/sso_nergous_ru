@@ -50,10 +50,11 @@ func run() error {
 		return err
 	}
 
-	lg, err := logger.New(cfg.Log, cfg.Env)
+	lg, logClose, err := logger.New(cfg.Log, cfg.Env, cfg.AppName)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = logClose.Close() }()
 
 	app, err := bootstrap.New(ctx, cfg, lg)
 	if err != nil {

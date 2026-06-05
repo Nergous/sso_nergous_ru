@@ -38,7 +38,7 @@ func (c *RateLimitConfig) validate() error {
 	}
 
 	if c.Policies.LoginPerIP.Burst <= 0 {
-		errs = append(errs, fmt.Errorf("ratelimit.policies.login_per_username.burst: must be > 0"))
+		errs = append(errs, fmt.Errorf("ratelimit.policies.login_per_ip.burst: must be > 0"))
 	}
 
 	if c.Policies.LoginPerUsername.Rps <= 0 {

@@ -241,7 +241,11 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	// types; the ratelimit package itself is proto-free by design.
 	var rateLimitUnary grpc.UnaryServerInterceptor
 	if cfg.RateLimit.Enabled {
-		rl := buildRateLimiter(cfg.RateLimit)
+		rl, err := buildRateLimiter(cfg.RateLimit)
+		if err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("bootstrap: build rate limiter: %w", err)
+		}
 		rl.Start(ctx)
 		rateLimitUnary = rl.Unary()
 	}
@@ -301,7 +305,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 // Keeping the extractors here (and not inside the ratelimit package)
 // preserves the package's proto-freedom — ratelimit operates on opaque
 // (ctx, req any) values and never imports a generated message type.
-func buildRateLimiter(cfg config.RateLimitConfig) *ratelimit.Interceptor {
+func buildRateLimiter(cfg config.RateLimitConfig) (*ratelimit.Interceptor, error) {
 	idle := func(p config.Policy) time.Duration {
 		// Default idle eviction: twice the time to refill the bucket
 		// from empty to burst. Floored at 1m so a low-rps policy still

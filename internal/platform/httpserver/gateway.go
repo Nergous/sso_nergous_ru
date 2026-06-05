@@ -16,9 +16,6 @@ import (
 	ssoserviceaccountv1 "github.com/Nergous/sso_protos/gen/go/sso/serviceaccount/v1"
 )
 
-// registerGatewayHandlers attaches every grpc-gateway service handler to mux,
-// using a single shared ClientConn back to the gRPC server. New services must
-// be added here when their proto gains google.api.http annotations.
 func registerGatewayHandlers(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
 	type registrar struct {
 		name string

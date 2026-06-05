@@ -2,6 +2,8 @@
 # Drives profile-specific defaults (e.g. reflection on/off, TLS strictness).
 env: local
 
+app_name: sso_nergous_ru
+
 # Logging.
 log:
   # Severity threshold: debug | info | warn | error.
@@ -97,6 +99,14 @@ http:
   # so that HTTP drains first and only then gRPC handlers wind down.
   shutdown_timeout: 30s
 
+  write_timeout: 30s
+
+  read_timeout: 30s
+
+  read_header_timeout: 5s
+
+  idle_timeout: 60s
+
   cors:
     # Exact-match origin allowlist. Use "*" only for local dev — wildcard
     # disables credentials per the CORS spec, which breaks cookie auth.
@@ -183,6 +193,9 @@ auth:
     refresh_rotation_ttl: 168h
   bcrypt:
     cost: 12
+  lockout:
+    threshold: 5
+    duration: 15m
 
 audit:
   enabled: true

@@ -24,6 +24,7 @@ func (Secret) MarshalYAML() (any, error)    { return "***", nil }
 
 type Config struct {
 	Env       Env             `yaml:"env" env:"APP_ENV" env-required:"true"`
+	AppName   AppName         `yaml:"app_name" env:"APP_NAME" env-required:"true"`
 	Log       LogConfig       `yaml:"log"`
 	GRPC      GRPCConfig      `yaml:"grpc"`
 	HTTP      HTTPConfig      `yaml:"http"`
@@ -75,6 +76,7 @@ func Help() (string, error) {
 func (c *Config) Validate() error {
 	return errors.Join(
 		c.Env.validate(),
+		c.AppName.validate(),
 		c.Log.validate(),
 		c.GRPC.validate(),
 		c.HTTP.validate(),
