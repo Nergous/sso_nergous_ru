@@ -30,4 +30,5 @@ const (
 	ReasonServiceAccountDisabled      = "ERROR_REASON_SERVICE_ACCOUNT_DISABLED"
 	ReasonInvalidClientCredentials    = "ERROR_REASON_INVALID_CLIENT_CREDENTIALS"
 	ReasonRateLimited                 = "ERROR_REASON_RATE_LIMITED"
+	ReasonAccountLocked               = "ERROR_REASON_ACCOUNT_LOCKED"
 )
